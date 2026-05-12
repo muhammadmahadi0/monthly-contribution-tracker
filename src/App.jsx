@@ -877,45 +877,46 @@ function MemberHistoryModal({ isOpen, onClose, member, transactions }) {
   );
 }
 
-function GlobalLedger({ members, transactions, onEditTransaction, onDeleteTransaction }) {
+function GlobalLedger({ members, transactions, onEditTransaction, onDeleteTransaction, onBack }) {
   const { t } = useLanguage();
 
-  // Console log for debugging
-  console.log('[GlobalLedger] transactions:', transactions);
-  console.log('[GlobalLedger] members:', members);
-
   // Safety check: ensure transactions is an array
-  const safeTransactions = Array.isArray(transactions) ? transactions : [];
-  console.log('[GlobalLedger] safeTransactions:', safeTransactions);
+  const safeTransactions = (transactions || []);
+
+  // Safety check: ensure members is an array
+  const safeMembers = (members || []);
+
+  // Bulletproof member lookup
+  const getMemberName = (memberId) => {
+    if (!memberId) return 'Unknown Member';
+    const member = safeMembers.find(m => String(m.id) === String(memberId));
+    return member ? member.name : 'Unknown Member';
+  };
 
   const sortedTransactions = useMemo(() => {
-    const sorted = [...safeTransactions].sort((a, b) => new Date(b.date) - new Date(a.date));
-    console.log('[GlobalLedger] sortedTransactions:', sorted);
-    return sorted;
+    if (!Array.isArray(safeTransactions)) return [];
+    return [...safeTransactions].sort((a, b) => new Date(b.date) - new Date(a.date));
   }, [safeTransactions]);
 
   const totalSum = useMemo(() => {
-    const total = safeTransactions.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
-    console.log('[GlobalLedger] totalSum:', total);
-    return total;
+    if (!Array.isArray(safeTransactions)) return 0;
+    return safeTransactions.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
   }, [safeTransactions]);
 
-  const getMemberName = (memberId) => {
-    if (!memberId) {
-      console.log('[GlobalLedger] getMemberName: memberId is null/undefined');
-      return t('unknown');
-    }
-    // Use String comparison to handle different types
-    const member = members?.find(m => String(m.id) === String(memberId));
-    if (!member) {
-      console.log('[GlobalLedger] getMemberName: member not found for memberId:', memberId);
-    }
-    return member?.name || t('unknown');
-  };
-
-  if (safeTransactions.length === 0) {
+  if (!Array.isArray(safeTransactions) || safeTransactions.length === 0) {
     return (
       <div className="space-y-4">
+        {/* Back Button */}
+        <button
+          onClick={onBack}
+          className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white mb-2"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+          <span>Back to Dashboard</span>
+        </button>
+
         {/* Grand Total Card - Empty State */}
         <div className="bg-gradient-to-r from-indigo-600 to-blue-500 rounded-xl shadow-lg p-5 text-white">
           <div className="text-sm opacity-80 mb-1">{t('total')}</div>
@@ -935,6 +936,17 @@ function GlobalLedger({ members, transactions, onEditTransaction, onDeleteTransa
 
   return (
     <div className="space-y-4">
+      {/* Back Button */}
+      <button
+        onClick={onBack}
+        className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white mb-2"
+      >
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+        </svg>
+        <span>Back to Dashboard</span>
+      </button>
+
       {/* Grand Total Card */}
       <div className="bg-gradient-to-r from-indigo-600 to-blue-500 rounded-xl shadow-lg p-5 text-white">
         <div className="text-sm opacity-80 mb-1">{t('total')}</div>
@@ -944,44 +956,50 @@ function GlobalLedger({ members, transactions, onEditTransaction, onDeleteTransa
 
       {/* Transaction Cards */}
       <div className="space-y-3">
-        {sortedTransactions.map((t) => (
-          <div key={t.id} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-4">
-            <div className="flex items-start justify-between">
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-xs text-gray-500 dark:text-gray-400">{formatDate(t.date)}</span>
+        {sortedTransactions.map((transaction) => {
+          // Bulletproof member lookup for each transaction
+          const displayName = getMemberName(transaction.memberId);
+          const amount = Number(transaction.amount) || 0;
+
+          return (
+            <div key={transaction.id} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-4">
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-xs text-gray-500 dark:text-gray-400">{formatDate(transaction.date)}</span>
+                  </div>
+                  <div className="font-semibold text-gray-900 dark:text-white">{displayName}</div>
+                  {transaction.description && (
+                    <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">{transaction.description}</div>
+                  )}
                 </div>
-                <div className="font-semibold text-gray-900 dark:text-white">{getMemberName(t.memberId)}</div>
-                {t.description && (
-                  <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t.description}</div>
-                )}
-              </div>
-              <div className="flex flex-col items-end gap-2">
-                <span className="text-lg font-bold text-green-600 dark:text-green-400">{formatCurrency(t.amount)}</span>
-                <div className="flex gap-1">
-                  <button
-                    onClick={() => onEditTransaction(t)}
-                    className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900 rounded-lg transition-colors"
-                    title={t('edit')}
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                    </svg>
-                  </button>
-                  <button
-                    onClick={() => onDeleteTransaction(t)}
-                    className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900 rounded-lg transition-colors"
-                    title={t('delete')}
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                  </button>
+                <div className="flex flex-col items-end gap-2">
+                  <span className="text-lg font-bold text-green-600 dark:text-green-400">{formatCurrency(amount)}</span>
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => onEditTransaction && onEditTransaction(transaction)}
+                      className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900 rounded-lg transition-colors"
+                      title={t('edit')}
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={() => onDeleteTransaction && onDeleteTransaction(transaction)}
+                      className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900 rounded-lg transition-colors"
+                      title={t('delete')}
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -1459,6 +1477,7 @@ export default function App() {
               transactions={transactions}
               onEditTransaction={handleEditTransaction}
               onDeleteTransaction={handleDeleteTransaction}
+              onBack={() => setActiveTab('dashboard')}
             />
           ) : (
             <HistoryTab history={editHistory} />
