@@ -880,20 +880,36 @@ function MemberHistoryModal({ isOpen, onClose, member, transactions }) {
 function GlobalLedger({ members, transactions, onEditTransaction, onDeleteTransaction }) {
   const { t } = useLanguage();
 
+  // Console log for debugging
+  console.log('[GlobalLedger] transactions:', transactions);
+  console.log('[GlobalLedger] members:', members);
+
   // Safety check: ensure transactions is an array
   const safeTransactions = Array.isArray(transactions) ? transactions : [];
+  console.log('[GlobalLedger] safeTransactions:', safeTransactions);
 
   const sortedTransactions = useMemo(() => {
-    return [...safeTransactions].sort((a, b) => new Date(b.date) - new Date(a.date));
+    const sorted = [...safeTransactions].sort((a, b) => new Date(b.date) - new Date(a.date));
+    console.log('[GlobalLedger] sortedTransactions:', sorted);
+    return sorted;
   }, [safeTransactions]);
 
   const totalSum = useMemo(() => {
-    return safeTransactions.reduce((sum, t) => sum + (t.amount || 0), 0);
+    const total = safeTransactions.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+    console.log('[GlobalLedger] totalSum:', total);
+    return total;
   }, [safeTransactions]);
 
   const getMemberName = (memberId) => {
-    if (!memberId) return t('unknown');
-    const member = members?.find(m => m.id === memberId);
+    if (!memberId) {
+      console.log('[GlobalLedger] getMemberName: memberId is null/undefined');
+      return t('unknown');
+    }
+    // Use String comparison to handle different types
+    const member = members?.find(m => String(m.id) === String(memberId));
+    if (!member) {
+      console.log('[GlobalLedger] getMemberName: member not found for memberId:', memberId);
+    }
     return member?.name || t('unknown');
   };
 

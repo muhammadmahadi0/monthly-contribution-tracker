@@ -2,12 +2,23 @@ import { useState, useCallback, useEffect } from 'react';
 
 const STORAGE_KEY = 'monthly-contribution-tracker';
 
+// Validate and sanitize state
+function validateState(state) {
+  return {
+    members: Array.isArray(state.members) ? state.members : [],
+    transactions: Array.isArray(state.transactions) ? state.transactions : [],
+  };
+}
+
 export function useUndoRedo(initialState) {
   const [state, setState] = useState(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
-      return stored ? JSON.parse(stored) : initialState;
-    } catch {
+      const parsed = stored ? JSON.parse(stored) : initialState;
+      console.log('[useUndoRedo] Loading from localStorage:', parsed);
+      return validateState(parsed);
+    } catch (error) {
+      console.error('[useUndoRedo] Failed to parse stored data:', error);
       return initialState;
     }
   });
