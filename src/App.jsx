@@ -1,9 +1,10 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, createContext, useContext } from 'react';
 import { useUndoRedo, generateId, formatMonthYear, formatDate } from './hooks/useUndoRedo';
 
-// ============= THEME CONTEXT =============
+// ============= THEME & LANGUAGE CONTEXT =============
 
 const THEME_KEY = 'ledger-theme';
+const LANGUAGE_KEY = 'ledger-language';
 
 function getStoredTheme() {
   return localStorage.getItem(THEME_KEY) || 'light';
@@ -11,6 +12,231 @@ function getStoredTheme() {
 
 function setStoredTheme(theme) {
   localStorage.setItem(THEME_KEY, theme);
+}
+
+function getStoredLanguage() {
+  return localStorage.getItem(LANGUAGE_KEY) || 'en';
+}
+
+function setStoredLanguage(lang) {
+  localStorage.setItem(LANGUAGE_KEY, lang);
+}
+
+// ============= TRANSLATIONS =============
+
+const translations = {
+  en: {
+    // App Header
+    appTitle: 'Contribution Tracker',
+    appSubtitle: 'Monthly payment management',
+
+    // Buttons & Actions
+    addMember: 'Add Member',
+    editMember: 'Edit Member',
+    update: 'Update',
+    cancel: 'Cancel',
+    delete: 'Delete',
+    addPayment: '+ Add Payment',
+    exportCSV: 'Export CSV',
+    edit: 'Edit',
+
+    // Member Modal
+    memberName: 'Name',
+    memberNamePlaceholder: 'Enter member name',
+    monthlyAmount: 'Monthly Amount (TK)',
+    startMonth: 'Start Month',
+    debtCalculationNote: 'Debt calculation starts from this month.',
+    addNewMember: 'Add New Member',
+
+    // Payment Modal
+    addPaymentTitle: 'Add Payment',
+    editPaymentTitle: 'Edit Payment',
+    amount: 'Amount (TK)',
+    amountPlaceholder: 'Enter amount',
+    date: 'Date',
+    description: 'Description (Optional)',
+    descriptionPlaceholder: 'e.g., Monthly contribution',
+    add: 'Add',
+
+    // Status
+    paid: 'Paid',
+    advanced: 'Advanced',
+    due: 'Due',
+    paidInFull: 'All payments up to date',
+    advancedDesc: 'surplus',
+    dueDesc: 'deficit',
+
+    // Dashboard
+    expected: 'Expected',
+    collected: 'Collected',
+    due: 'Due',
+    currentBalance: 'Current Balance',
+    thisMonth: 'This Month',
+    paidLabel: 'Paid',
+    dueLabel: 'Due',
+    lifetimeSummary: 'Lifetime Summary',
+    totalPaid: 'Total Paid',
+
+    // Tabs
+    dashboard: 'Dashboard',
+    globalLedger: 'Global Ledger',
+    history: 'History',
+
+    // Global Ledger
+    allTransactions: 'All Transactions',
+    showingPayments: 'Showing all payments from all members',
+    total: 'Total',
+    noTransactions: 'No transactions yet.',
+
+    // Member History
+    memberHistory: 'History',
+    lifetimePaid: 'Lifetime Paid',
+    noTransactionsYet: 'No transactions yet.',
+    payment: 'Payment',
+    unknown: 'Unknown',
+
+    // Empty State
+    noMembers: 'No members yet',
+    addFirstMember: 'Add your first member to start tracking',
+
+    // Delete Confirm
+    deleteMember: 'Delete Member',
+    deleteTransaction: 'Delete Transaction',
+    deleteMemberMsg: 'Delete this member and all their transactions? This cannot be undone.',
+    deleteTransactionMsg: 'Delete this transaction? This cannot be undone.',
+
+    // History Tab
+    editHistory: 'Edit History',
+    noHistory: 'No history yet.',
+
+    // Summary Bar
+    collectedLabel: 'Collected',
+    dueLabel: 'Due',
+
+    // Theme
+    lightMode: 'Light Mode',
+    darkMode: 'Dark Mode',
+
+    // Misc
+    month: '/month',
+  },
+  bn: {
+    // App Header
+    appTitle: 'কন্ট্রিবিউশন ট্র্যাকার',
+    appSubtitle: 'মাসিক পেমেন্ট ব্যবস্থাপনা',
+
+    // Buttons & Actions
+    addMember: 'সদস্য যোগ',
+    editMember: 'সদস্য সম্পাদনা',
+    update: 'আপডেট',
+    cancel: 'বাতিল',
+    delete: 'মুছুন',
+    addPayment: '+ পেমেন্ট যোগ',
+    exportCSV: 'CSV রপ্তানি',
+    edit: 'সম্পাদনা',
+
+    // Member Modal
+    memberName: 'নাম',
+    memberNamePlaceholder: 'সদস্যের নাম লিখুন',
+    monthlyAmount: 'মাসিক টাকা (টাকা)',
+    startMonth: 'শুরুর মাস',
+    debtCalculationNote: 'এই মাস থেকে ঋণ গণনা শুরু হবে।',
+    addNewMember: 'নতুন সদস্য যোগ করুন',
+
+    // Payment Modal
+    addPaymentTitle: 'পেমেন্ট যোগ',
+    editPaymentTitle: 'পেমেন্ট সম্পাদনা',
+    amount: 'টাকার পরিমাণ (টাকা)',
+    amountPlaceholder: 'টাকার পরিমাণ লিখুন',
+    date: 'তারিখ',
+    description: 'বিবরণ (ঐচ্ছিক)',
+    descriptionPlaceholder: 'যেমন: মাসিক কন্ট্রিবিউশন',
+    add: 'যোগ',
+
+    // Status
+    paid: 'পরিশোধিত',
+    advanced: 'অগ্রিম',
+    due: 'বাকি',
+    paidInFull: 'সব পেমেন্ট আপ টু ডেট',
+    advancedDesc: 'উদ্বৃত্ত',
+    dueDesc: 'ঘাটতি',
+
+    // Dashboard
+    expected: 'প্রত্যাশিত',
+    collected: 'সংগ্রহিত',
+    due: 'বাকি',
+    currentBalance: 'বর্তমান ব্যালেন্স',
+    thisMonth: 'এই মাসে',
+    paidLabel: 'দেওয়া',
+    dueLabel: 'দেওয়া বাকি',
+    lifetimeSummary: 'আজীবন সারসংক্ষেপ',
+    totalPaid: 'মোট দেওয়া',
+
+    // Tabs
+    dashboard: 'ড্যাশবোর্ড',
+    globalLedger: 'গ্লোবাল লেজার',
+    history: 'ইতিহাস',
+
+    // Global Ledger
+    allTransactions: 'সমস্ত লেনদেন',
+    showingPayments: 'সমস্ত সদস্যের পেমেন্ট দেখাচ্ছে',
+    total: 'মোট',
+    noTransactions: 'কোনো লেনদেন নেই।',
+
+    // Member History
+    memberHistory: 'ইতিহাস',
+    lifetimePaid: 'আজীবন দেওয়া',
+    noTransactionsYet: 'কোনো লেনদেন নেই।',
+    payment: 'পেমেন্ট',
+    unknown: 'অজানা',
+
+    // Empty State
+    noMembers: 'কোনো সদস্য নেই',
+    addFirstMember: 'ট্র্যাকিং শুরু করতে আপনার প্রথম সদস্য যোগ করুন',
+
+    // Delete Confirm
+    deleteMember: 'সদস্য মুছুন',
+    deleteTransaction: 'লেনদেন মুছুন',
+    deleteMemberMsg: 'এই সদস্য এবং তাদের সমস্ত লেনদেন মুছে ফেলবেন? এটি পূর্বাবস্থায় ফেরানো যায় না।',
+    deleteTransactionMsg: 'এই লেনদেন মুছে ফেলবেন? এটি পূর্বাবস্থায় ফেরানো যায় না।',
+
+    // History Tab
+    editHistory: 'সম্পাদনা ইতিহাস',
+    noHistory: 'এখনও কোনো ইতিহাস নেই।',
+
+    // Summary Bar
+    collectedLabel: 'সংগ্রহ',
+    dueLabel: 'বাকি',
+
+    // Theme
+    lightMode: 'লাইট মোড',
+    darkMode: 'ডার্ক মোড',
+
+    // Misc
+    month: '/মাস',
+  },
+};
+
+// ============= LANGUAGE CONTEXT =============
+
+const LanguageContext = createContext();
+
+function LanguageProvider({ children, language, setLanguage }) {
+  const t = (key) => translations[language]?.[key] || translations.en[key] || key;
+
+  const months = language === 'bn'
+    ? ['জানুয়ারি', 'ফেব্রুয়ারি', 'মার্চ', 'এপ্রিল', 'মে', 'জুন', 'জুলাই', 'আগস্ট', 'সেপ্টেম্বর', 'অক্টোবর', 'নভেম্বর', 'ডিসেম্বর']
+    : ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+  return (
+    <LanguageContext.Provider value={{ t, language, setLanguage, months }}>
+      {children}
+    </LanguageContext.Provider>
+  );
+}
+
+function useLanguage() {
+  return useContext(LanguageContext);
 }
 
 // ============= UTILITY FUNCTIONS =============
@@ -63,27 +289,27 @@ function calculateBalance(transactions, member, selectedYear, selectedMonth) {
   return totalPaid - totalDue;
 }
 
-function getStatusInfo(balance) {
+function getStatusInfo(balance, t) {
   if (balance === 0) {
     return {
       status: 'paid',
-      label: 'Paid',
+      label: t('paid'),
       color: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',
-      description: 'All payments up to date'
+      description: t('paidInFull')
     };
   } else if (balance > 0) {
     return {
       status: 'advanced',
-      label: 'Advanced',
+      label: t('advanced'),
       color: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',
-      description: `+${balance} TK surplus`
+      description: `+${balance} TK ${t('advancedDesc')}`
     };
   } else {
     return {
       status: 'due',
-      label: 'Due',
+      label: t('due'),
       color: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300',
-      description: `${Math.abs(balance)} TK deficit`
+      description: `${Math.abs(balance)} TK ${t('dueDesc')}`
     };
   }
 }
@@ -99,12 +325,23 @@ function formatCurrency(amount) {
 
 // ============= COMPONENTS =============
 
-function ThemeToggle({ isDark, toggleTheme }) {
+function LanguageToggle({ language, setLanguage }) {
+  return (
+    <button
+      onClick={() => setLanguage(language === 'en' ? 'bn' : 'en')}
+      className="px-3 py-1.5 text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+    >
+      {language === 'en' ? 'বাং' : 'EN'}
+    </button>
+  );
+}
+
+function ThemeToggle({ isDark, toggleTheme, t }) {
   return (
     <button
       onClick={toggleTheme}
       className="p-3 text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
-      title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+      title={isDark ? t('lightMode') : t('darkMode')}
     >
       {isDark ? (
         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -119,12 +356,7 @@ function ThemeToggle({ isDark, toggleTheme }) {
   );
 }
 
-function MonthPicker({ selectedYear, selectedMonth, onYearChange, onMonthChange }) {
-  const months = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December',
-  ];
-
+function MonthPicker({ selectedYear, selectedMonth, onYearChange, onMonthChange, months }) {
   const years = useMemo(() => {
     const currentYear = new Date().getFullYear();
     return Array.from({ length: 12 }, (_, i) => currentYear - 3 + i);
@@ -155,6 +387,7 @@ function MonthPicker({ selectedYear, selectedMonth, onYearChange, onMonthChange 
 }
 
 function MemberModal({ isOpen, onClose, onSave, member = null }) {
+  const { t } = useLanguage();
   const defaultJoinDate = getFirstDayOfMonth();
   const [name, setName] = useState(member?.name || '');
   const [fixedAmount, setFixedAmount] = useState(member?.fixedAmount || 500);
@@ -184,21 +417,21 @@ function MemberModal({ isOpen, onClose, onSave, member = null }) {
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
-        <h2 className="text-xl font-semibold mb-4 dark:text-white">{member ? 'Edit Member' : 'Add New Member'}</h2>
+        <h2 className="text-xl font-semibold mb-4 dark:text-white">{member ? t('editMember') : t('addNewMember')}</h2>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Name</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('memberName')}</label>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white dark:bg-gray-700 dark:text-white dark:placeholder-gray-400 text-base"
-              placeholder="Enter member name"
+              placeholder={t('memberNamePlaceholder')}
               required
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Monthly Amount (TK)</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('monthlyAmount')}</label>
             <input
               type="number"
               value={fixedAmount}
@@ -209,7 +442,7 @@ function MemberModal({ isOpen, onClose, onSave, member = null }) {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Start Month</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('startMonth')}</label>
             <input
               type="date"
               value={joinDate}
@@ -218,7 +451,7 @@ function MemberModal({ isOpen, onClose, onSave, member = null }) {
               required
             />
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-              Debt calculation starts from this month.
+              {t('debtCalculationNote')}
             </p>
           </div>
           <div className="flex gap-3 pt-2">
@@ -227,13 +460,13 @@ function MemberModal({ isOpen, onClose, onSave, member = null }) {
               onClick={onClose}
               className="flex-1 px-4 py-3 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors font-medium text-base"
             >
-              Cancel
+              {t('cancel')}
             </button>
             <button
               type="submit"
               className="flex-1 px-4 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors font-medium text-base"
             >
-              {member ? 'Update' : 'Add Member'}
+              {member ? t('update') : t('addMember')}
             </button>
           </div>
         </form>
@@ -243,6 +476,7 @@ function MemberModal({ isOpen, onClose, onSave, member = null }) {
 }
 
 function TransactionModal({ isOpen, onClose, onSave, transaction = null, memberName = '', defaultDate = null }) {
+  const { t } = useLanguage();
   const [amount, setAmount] = useState(transaction?.amount?.toString() || '');
   const [date, setDate] = useState(transaction?.date || defaultDate || new Date().toISOString().split('T')[0]);
   const [description, setDescription] = useState(transaction?.description || '');
@@ -278,24 +512,24 @@ function TransactionModal({ isOpen, onClose, onSave, transaction = null, memberN
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
         <h2 className="text-xl font-semibold mb-4 dark:text-white">
-          {transaction ? `Edit Payment - ${memberName}` : `Add Payment - ${memberName}`}
+          {transaction ? `${t('editPaymentTitle')} - ${memberName}` : `${t('addPaymentTitle')} - ${memberName}`}
         </h2>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Amount (TK)</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('amount')}</label>
             <input
               type="number"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white dark:bg-gray-700 dark:text-white text-base"
-              placeholder="Enter amount"
+              placeholder={t('amountPlaceholder')}
               min="1"
               step="0.01"
               required
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Date</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('date')}</label>
             <input
               type="date"
               value={date}
@@ -305,13 +539,13 @@ function TransactionModal({ isOpen, onClose, onSave, transaction = null, memberN
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Description (Optional)</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('description')}</label>
             <input
               type="text"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white dark:bg-gray-700 dark:text-white text-base"
-              placeholder="e.g., Monthly contribution"
+              placeholder={t('descriptionPlaceholder')}
             />
           </div>
           <div className="flex gap-3 pt-2">
@@ -320,13 +554,13 @@ function TransactionModal({ isOpen, onClose, onSave, transaction = null, memberN
               onClick={onClose}
               className="flex-1 px-4 py-3 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors font-medium text-base"
             >
-              Cancel
+              {t('cancel')}
             </button>
             <button
               type="submit"
               className="flex-1 px-4 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors font-medium text-base"
             >
-              {transaction ? 'Update' : 'Add'} Payment
+              {transaction ? t('update') : t('add')} {t('addPayment').replace('+ ', '')}
             </button>
           </div>
         </form>
@@ -348,13 +582,13 @@ function DeleteConfirmModal({ isOpen, onClose, onConfirm, title, message }) {
             onClick={onClose}
             className="flex-1 px-4 py-3 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors font-medium text-base"
           >
-            Cancel
+            {useLanguage().t('cancel')}
           </button>
           <button
             onClick={onConfirm}
             className="flex-1 px-4 py-3 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-colors font-medium text-base"
           >
-            Delete
+            {useLanguage().t('delete')}
           </button>
         </div>
       </div>
@@ -365,6 +599,7 @@ function DeleteConfirmModal({ isOpen, onClose, onConfirm, title, message }) {
 // ============= MOBILE-FIRST CARD COMPONENTS =============
 
 function StatsDashboard({ members, transactions, selectedYear, selectedMonth }) {
+  const { t } = useLanguage();
   const stats = useMemo(() => {
     let totalExpected = 0;
     let totalCollected = 0;
@@ -391,19 +626,19 @@ function StatsDashboard({ members, transactions, selectedYear, selectedMonth }) 
   return (
     <div className="grid grid-cols-3 gap-3 mb-6">
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-4">
-        <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">Expected</div>
+        <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">{t('expected')}</div>
         <div className="text-lg font-bold text-gray-900 dark:text-white">
           {formatCurrency(stats.totalExpected)}
         </div>
       </div>
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-4">
-        <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">Collected</div>
+        <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">{t('collected')}</div>
         <div className="text-lg font-bold text-green-600 dark:text-green-400">
           {formatCurrency(stats.totalCollected)}
         </div>
       </div>
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-4">
-        <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">Due</div>
+        <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">{t('due')}</div>
         <div className="text-lg font-bold text-red-600 dark:text-red-400">
           {formatCurrency(stats.totalDue)}
         </div>
@@ -413,6 +648,7 @@ function StatsDashboard({ members, transactions, selectedYear, selectedMonth }) 
 }
 
 function StickySummaryBar({ members, transactions, selectedYear, selectedMonth }) {
+  const { t } = useLanguage();
   const totals = useMemo(() => {
     let totalCollected = 0;
     let totalDue = 0;
@@ -438,14 +674,14 @@ function StickySummaryBar({ members, transactions, selectedYear, selectedMonth }
     <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 px-4 py-3 shadow-lg z-30 md:hidden">
       <div className="flex justify-between items-center max-w-lg mx-auto">
         <div className="text-center">
-          <div className="text-xs text-gray-500 dark:text-gray-400">Collected</div>
+          <div className="text-xs text-gray-500 dark:text-gray-400">{t('collectedLabel')}</div>
           <div className="text-base font-bold text-green-600 dark:text-green-400">
             {formatCurrency(totals.totalCollected)}
           </div>
         </div>
         <div className="w-px h-8 bg-gray-300 dark:bg-gray-600"></div>
         <div className="text-center">
-          <div className="text-xs text-gray-500 dark:text-gray-400">Due</div>
+          <div className="text-xs text-gray-500 dark:text-gray-400">{t('dueLabel')}</div>
           <div className="text-base font-bold text-red-600 dark:text-red-400">
             {formatCurrency(totals.totalDue)}
           </div>
@@ -466,6 +702,8 @@ function MemberCard({
   onDelete,
   onViewHistory
 }) {
+  const { t } = useLanguage();
+
   return (
     <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden mb-4">
       {/* Header */}
@@ -479,7 +717,7 @@ function MemberCard({
           <div>
             <h3 className="font-semibold text-gray-900 dark:text-white">{member.name}</h3>
             <p className="text-xs text-gray-500 dark:text-gray-400">
-              {formatCurrency(member.fixedAmount)}/month
+              {formatCurrency(member.fixedAmount)}{t('month')}
             </p>
           </div>
         </div>
@@ -492,25 +730,25 @@ function MemberCard({
       <div className="px-4 py-4">
         <div className="grid grid-cols-2 gap-4 mb-4">
           <div>
-            <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">Current Balance</div>
+            <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">{t('currentBalance')}</div>
             <div className={`text-xl font-bold ${balance >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
               {formatCurrency(balance)}
             </div>
           </div>
           <div>
-            <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">This Month</div>
+            <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">{t('thisMonth')}</div>
             <div className="text-sm text-gray-700 dark:text-gray-300">
-              <div>Paid: <span className="font-medium text-green-600 dark:text-green-400">{formatCurrency(totalPaid)}</span></div>
-              <div>Due: <span className="font-medium">{formatCurrency(totalDue)}</span></div>
+              <div>{t('paidLabel')}: <span className="font-medium text-green-600 dark:text-green-400">{formatCurrency(totalPaid)}</span></div>
+              <div>{t('dueLabel')}: <span className="font-medium">{formatCurrency(totalDue)}</span></div>
             </div>
           </div>
         </div>
 
         {/* Lifetime Stats */}
         <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3 mb-4">
-          <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">Lifetime Summary</div>
+          <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">{t('lifetimeSummary')}</div>
           <div className="text-sm font-medium text-gray-700 dark:text-gray-300">
-            Total Paid: {formatCurrency(totalPaid)}
+            {t('totalPaid')}: {formatCurrency(totalPaid)}
           </div>
         </div>
       </div>
@@ -521,11 +759,12 @@ function MemberCard({
           onClick={onAddTransaction}
           className="flex-1 px-4 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors font-medium text-base min-h-[44px]"
         >
-          + Add Payment
+          {t('addPayment')}
         </button>
         <button
           onClick={onViewHistory}
           className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors font-medium text-base min-h-[44px]"
+          title={t('memberHistory')}
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
@@ -534,6 +773,7 @@ function MemberCard({
         <button
           onClick={onEdit}
           className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors font-medium text-base min-h-[44px]"
+          title={t('edit')}
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
@@ -542,6 +782,7 @@ function MemberCard({
         <button
           onClick={onDelete}
           className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-red-600 dark:text-red-400 rounded-xl hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors font-medium text-base min-h-[44px]"
+          title={t('delete')}
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -553,6 +794,7 @@ function MemberCard({
 }
 
 function MemberHistoryModal({ isOpen, onClose, member, transactions }) {
+  const { t } = useLanguage();
   const memberTransactions = useMemo(() => {
     return transactions
       .filter(t => t.memberId === member?.id)
@@ -570,9 +812,9 @@ function MemberHistoryModal({ isOpen, onClose, member, transactions }) {
       <div className="bg-white dark:bg-gray-800 rounded-t-2xl md:rounded-2xl shadow-xl w-full md:max-w-lg max-h-[80vh] flex flex-col">
         <div className="px-4 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-semibold dark:text-white">{member.name} - History</h2>
+            <h2 className="text-lg font-semibold dark:text-white">{member.name} - {t('memberHistory')}</h2>
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              Lifetime Paid: {formatCurrency(lifetimeTotal)}
+              {t('lifetimePaid')}: {formatCurrency(lifetimeTotal)}
             </p>
           </div>
           <button
@@ -588,7 +830,7 @@ function MemberHistoryModal({ isOpen, onClose, member, transactions }) {
         <div className="flex-1 overflow-y-auto">
           {memberTransactions.length === 0 ? (
             <div className="p-8 text-center text-gray-500 dark:text-gray-400">
-              No transactions yet.
+              {t('noTransactionsYet')}
             </div>
           ) : (
             <div className="divide-y divide-gray-100 dark:divide-gray-700">
@@ -599,7 +841,7 @@ function MemberHistoryModal({ isOpen, onClose, member, transactions }) {
                       {formatCurrency(t.amount)}
                     </div>
                     <div className="text-sm text-gray-500 dark:text-gray-400">
-                      {t.description || 'Payment'}
+                      {t.description || t('payment')}
                     </div>
                   </div>
                   <div className="text-sm text-gray-500 dark:text-gray-400">
@@ -616,6 +858,7 @@ function MemberHistoryModal({ isOpen, onClose, member, transactions }) {
 }
 
 function GlobalLedger({ members, transactions, onEditTransaction, onDeleteTransaction }) {
+  const { t } = useLanguage();
   const sortedTransactions = useMemo(() => {
     return [...transactions].sort((a, b) => new Date(b.date) - new Date(a.date));
   }, [transactions]);
@@ -626,7 +869,7 @@ function GlobalLedger({ members, transactions, onEditTransaction, onDeleteTransa
 
   const getMemberName = (memberId) => {
     const member = members.find(m => m.id === memberId);
-    return member?.name || 'Unknown';
+    return member?.name || t('unknown');
   };
 
   if (transactions.length === 0) {
@@ -635,7 +878,7 @@ function GlobalLedger({ members, transactions, onEditTransaction, onDeleteTransa
         <svg className="w-12 h-12 text-gray-400 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
         </svg>
-        <p className="text-gray-500 dark:text-gray-400">No transactions yet.</p>
+        <p className="text-gray-500 dark:text-gray-400">{t('noTransactions')}</p>
       </div>
     );
   }
@@ -643,8 +886,8 @@ function GlobalLedger({ members, transactions, onEditTransaction, onDeleteTransa
   return (
     <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden">
       <div className="px-4 py-3 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
-        <h2 className="font-semibold text-gray-700 dark:text-gray-200">Global Ledger - All Transactions</h2>
-        <p className="text-xs text-gray-500 dark:text-gray-400">Showing all payments from all members</p>
+        <h2 className="font-semibold text-gray-700 dark:text-gray-200">{t('allTransactions')}</h2>
+        <p className="text-xs text-gray-500 dark:text-gray-400">{t('showingPayments')}</p>
       </div>
 
       <div className="divide-y divide-gray-100 dark:divide-gray-700">
@@ -665,7 +908,7 @@ function GlobalLedger({ members, transactions, onEditTransaction, onDeleteTransa
                 <button
                   onClick={() => onEditTransaction(t)}
                   className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900 rounded-lg transition-colors"
-                  title="Edit"
+                  title={t('edit')}
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
@@ -674,7 +917,7 @@ function GlobalLedger({ members, transactions, onEditTransaction, onDeleteTransa
                 <button
                   onClick={() => onDeleteTransaction(t)}
                   className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900 rounded-lg transition-colors"
-                  title="Delete"
+                  title={t('delete')}
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -687,7 +930,7 @@ function GlobalLedger({ members, transactions, onEditTransaction, onDeleteTransa
       </div>
 
       <div className="px-4 py-3 bg-gray-50 dark:bg-gray-700 border-t border-gray-200 dark:border-gray-600 flex justify-between items-center">
-        <span className="font-medium text-gray-700 dark:text-gray-300">Total</span>
+        <span className="font-medium text-gray-700 dark:text-gray-300">{t('total')}</span>
         <span className="text-xl font-bold text-gray-900 dark:text-white">{formatCurrency(totalSum)}</span>
       </div>
     </div>
@@ -695,6 +938,7 @@ function GlobalLedger({ members, transactions, onEditTransaction, onDeleteTransa
 }
 
 function HistoryTab({ history }) {
+  const { t } = useLanguage();
   const sortedHistory = useMemo(() => {
     return [...history].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
   }, [history]);
@@ -715,8 +959,8 @@ function HistoryTab({ history }) {
   if (history.length === 0) {
     return (
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6">
-        <h2 className="font-semibold text-gray-700 dark:text-gray-200 mb-4">Edit History</h2>
-        <p className="text-gray-500 dark:text-gray-400 text-sm">No history yet.</p>
+        <h2 className="font-semibold text-gray-700 dark:text-gray-200 mb-4">{t('editHistory')}</h2>
+        <p className="text-gray-500 dark:text-gray-400 text-sm">{t('noHistory')}</p>
       </div>
     );
   }
@@ -724,7 +968,7 @@ function HistoryTab({ history }) {
   return (
     <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden">
       <div className="px-4 py-3 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
-        <h2 className="font-semibold text-gray-700 dark:text-gray-200">Edit History</h2>
+        <h2 className="font-semibold text-gray-700 dark:text-gray-200">{t('editHistory')}</h2>
       </div>
       <div className="divide-y divide-gray-100 dark:divide-gray-700 max-h-96 overflow-y-auto">
         {sortedHistory.map((item) => (
@@ -805,6 +1049,7 @@ export default function App() {
   const [deletingItem, setDeletingItem] = useState(null);
 
   const [isDark, setIsDark] = useState(() => getStoredTheme() === 'dark');
+  const [language, setLanguage] = useState(() => getStoredLanguage());
   const [editHistory, setEditHistory] = useState([]);
 
   useEffect(() => {
@@ -815,6 +1060,10 @@ export default function App() {
     }
     setStoredTheme(isDark ? 'dark' : 'light');
   }, [isDark]);
+
+  useEffect(() => {
+    setStoredLanguage(language);
+  }, [language]);
 
   const toggleTheme = () => setIsDark(!isDark);
 
@@ -943,6 +1192,7 @@ export default function App() {
   };
 
   const memberData = useMemo(() => {
+    const t = (key) => translations[language]?.[key] || translations.en[key] || key;
     return members.map((member) => {
       const monthsElapsed = calculateMonthsElapsed(member.joinDate, selectedYear, selectedMonth);
       const totalDue = calculateTotalDue(member, selectedYear, selectedMonth);
@@ -954,7 +1204,7 @@ export default function App() {
         selectedMonth
       );
       const balance = calculateBalance(transactions, member, selectedYear, selectedMonth);
-      const statusInfo = getStatusInfo(balance);
+      const statusInfo = getStatusInfo(balance, t);
 
       return {
         member,
@@ -965,200 +1215,210 @@ export default function App() {
         statusInfo,
       };
     });
-  }, [members, transactions, selectedYear, selectedMonth]);
+  }, [members, transactions, selectedYear, selectedMonth, language]);
+
+  // Get translation function
+  const t = (key) => translations[language]?.[key] || translations.en[key] || key;
+  const months = language === 'bn'
+    ? ['জানুয়ারি', 'ফেব্রুয়ারি', 'মার্চ', 'এপ্রিল', 'মে', 'জুন', 'জুলাই', 'আগস্ট', 'সেপ্টেম্বর', 'অক্টোবর', 'নভেম্বর', 'ডিসেম্বর']
+    : ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-slate-900 transition-colors pb-20 md:pb-6">
-      {/* Header */}
-      <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-40">
-        <div className="max-w-lg mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex-1">
-              <h1 className="text-xl font-bold text-gray-900 dark:text-white">Contribution Tracker</h1>
-              <p className="text-xs text-gray-500 dark:text-gray-400">Monthly payment management</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={undo}
-                disabled={!canUndo}
-                className="p-2.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-40"
-                title="Undo"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
-                </svg>
-              </button>
-              <button
-                onClick={redo}
-                disabled={!canRedo}
-                className="p-2.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-40"
-                title="Redo"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 10h-10a8 8 0 00-8 8v2M21 10l-6 6m6-6l-6-6" />
-                </svg>
-              </button>
-              <ThemeToggle isDark={isDark} toggleTheme={toggleTheme} />
+    <LanguageProvider language={language} setLanguage={setLanguage}>
+      <div className="min-h-screen bg-gray-50 dark:bg-slate-900 transition-colors pb-20 md:pb-6">
+        {/* Header */}
+        <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-40">
+          <div className="max-w-lg mx-auto px-4 py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex-1">
+                <h1 className="text-xl font-bold text-gray-900 dark:text-white">{t('appTitle')}</h1>
+                <p className="text-xs text-gray-500 dark:text-gray-400">{t('appSubtitle')}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={undo}
+                  disabled={!canUndo}
+                  className="p-2.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-40"
+                  title="Undo"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                  </svg>
+                </button>
+                <button
+                  onClick={redo}
+                  disabled={!canRedo}
+                  className="p-2.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-40"
+                  title="Redo"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 10h-10a8 8 0 00-8 8v2M21 10l-6 6m6-6l-6-6" />
+                  </svg>
+                </button>
+                <LanguageToggle language={language} setLanguage={setLanguage} />
+                <ThemeToggle isDark={isDark} toggleTheme={toggleTheme} t={t} />
+              </div>
             </div>
           </div>
-        </div>
-      </header>
+        </header>
 
-      <main className="max-w-lg mx-auto px-4 py-4">
-        {/* Month Picker */}
-        <div className="flex items-center justify-between gap-3 mb-4">
-          <MonthPicker
-            selectedYear={selectedYear}
-            selectedMonth={selectedMonth}
-            onYearChange={setSelectedYear}
-            onMonthChange={setSelectedMonth}
-          />
-          <button
-            onClick={() => setIsMemberModalOpen(true)}
-            className="px-4 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors font-medium text-sm whitespace-nowrap"
-          >
-            + Add Member
-          </button>
-        </div>
-
-        {/* Tabs - Mobile optimized */}
-        <div className="flex gap-1 mb-4 overflow-x-auto">
-          {[
-            { id: 'dashboard', label: 'Dashboard' },
-            { id: 'ledger', label: 'Global Ledger' },
-            { id: 'history', label: 'History' },
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`px-4 py-2.5 text-sm font-medium rounded-lg transition-colors whitespace-nowrap ${
-                activeTab === tab.id
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        {activeTab === 'dashboard' ? (
-          <>
-            <StatsDashboard
-              members={members}
-              transactions={transactions}
+        <main className="max-w-lg mx-auto px-4 py-4">
+          {/* Month Picker */}
+          <div className="flex items-center justify-between gap-3 mb-4">
+            <MonthPicker
               selectedYear={selectedYear}
               selectedMonth={selectedMonth}
+              onYearChange={setSelectedYear}
+              onMonthChange={setSelectedMonth}
+              months={months}
             />
+            <button
+              onClick={() => setIsMemberModalOpen(true)}
+              className="px-4 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors font-medium text-sm whitespace-nowrap"
+            >
+              {t('addMember')}
+            </button>
+          </div>
 
-            {members.length === 0 ? (
-              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-8 text-center">
-                <div className="w-16 h-16 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
-                </div>
-                <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-1">No members yet</h3>
-                <p className="text-gray-500 dark:text-gray-400 mb-4">Add your first member to start tracking</p>
-                <button
-                  onClick={() => setIsMemberModalOpen(true)}
-                  className="px-6 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors font-medium"
-                >
-                  + Add Member
-                </button>
-              </div>
-            ) : (
-              memberData.map((data) => (
-                <MemberCard
-                  key={data.member.id}
-                  member={data.member}
-                  balance={data.balance}
-                  statusInfo={data.statusInfo}
-                  totalDue={data.totalDue}
-                  totalPaid={data.totalPaid}
-                  onAddTransaction={() => handleAddTransaction(data.member)}
-                  onEdit={() => handleEditMember(data.member)}
-                  onDelete={() => confirmDeleteMember(data.member)}
-                  onViewHistory={() => handleViewHistory(data.member)}
-                />
-              ))
-            )}
-
-            {members.length > 0 && (
+          {/* Tabs - Mobile optimized */}
+          <div className="flex gap-1 mb-4 overflow-x-auto">
+            {[
+              { id: 'dashboard', label: t('dashboard') },
+              { id: 'ledger', label: t('globalLedger') },
+              { id: 'history', label: t('history') },
+            ].map((tab) => (
               <button
-                onClick={handleExportCSV}
-                className="w-full mt-4 px-4 py-3 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors font-medium text-sm"
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`px-4 py-2.5 text-sm font-medium rounded-lg transition-colors whitespace-nowrap ${
+                  activeTab === tab.id
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+                }`}
               >
-                Export CSV
+                {tab.label}
               </button>
-            )}
-          </>
-        ) : activeTab === 'ledger' ? (
-          <GlobalLedger
+            ))}
+          </div>
+
+          {activeTab === 'dashboard' ? (
+            <>
+              <StatsDashboard
+                members={members}
+                transactions={transactions}
+                selectedYear={selectedYear}
+                selectedMonth={selectedMonth}
+              />
+
+              {members.length === 0 ? (
+                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-8 text-center">
+                  <div className="w-16 h-16 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                  </div>
+                  <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-1">{t('noMembers')}</h3>
+                  <p className="text-gray-500 dark:text-gray-400 mb-4">{t('addFirstMember')}</p>
+                  <button
+                    onClick={() => setIsMemberModalOpen(true)}
+                    className="px-6 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors font-medium"
+                  >
+                    {t('addMember')}
+                  </button>
+                </div>
+              ) : (
+                memberData.map((data) => (
+                  <MemberCard
+                    key={data.member.id}
+                    member={data.member}
+                    balance={data.balance}
+                    statusInfo={data.statusInfo}
+                    totalDue={data.totalDue}
+                    totalPaid={data.totalPaid}
+                    onAddTransaction={() => handleAddTransaction(data.member)}
+                    onEdit={() => handleEditMember(data.member)}
+                    onDelete={() => confirmDeleteMember(data.member)}
+                    onViewHistory={() => handleViewHistory(data.member)}
+                  />
+                ))
+              )}
+
+              {members.length > 0 && (
+                <button
+                  onClick={handleExportCSV}
+                  className="w-full mt-4 px-4 py-3 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors font-medium text-sm"
+                >
+                  {t('exportCSV')}
+                </button>
+              )}
+            </>
+          ) : activeTab === 'ledger' ? (
+            <GlobalLedger
+              members={members}
+              transactions={transactions}
+              onEditTransaction={handleEditTransaction}
+              onDeleteTransaction={handleDeleteTransaction}
+            />
+          ) : (
+            <HistoryTab history={editHistory} />
+          )}
+        </main>
+
+        {/* Sticky Summary Bar - Mobile only */}
+        {activeTab === 'dashboard' && members.length > 0 && (
+          <StickySummaryBar
             members={members}
             transactions={transactions}
-            onEditTransaction={handleEditTransaction}
-            onDeleteTransaction={handleDeleteTransaction}
+            selectedYear={selectedYear}
+            selectedMonth={selectedMonth}
           />
-        ) : (
-          <HistoryTab history={editHistory} />
         )}
-      </main>
 
-      {/* Sticky Summary Bar - Mobile only */}
-      {activeTab === 'dashboard' && members.length > 0 && (
-        <StickySummaryBar
-          members={members}
-          transactions={transactions}
-          selectedYear={selectedYear}
-          selectedMonth={selectedMonth}
+        {/* Modals */}
+        <MemberModal
+          isOpen={isMemberModalOpen}
+          onClose={() => {
+            setIsMemberModalOpen(false);
+            setEditingMember(null);
+          }}
+          onSave={editingMember ? handleUpdateMember : handleAddMember}
+          member={editingMember}
         />
-      )}
 
-      {/* Modals */}
-      <MemberModal
-        isOpen={isMemberModalOpen}
-        onClose={() => {
-          setIsMemberModalOpen(false);
-          setEditingMember(null);
-        }}
-        onSave={editingMember ? handleUpdateMember : handleAddMember}
-        member={editingMember}
-      />
+        <TransactionModal
+          isOpen={isTransactionModalOpen}
+          onClose={() => {
+            setIsTransactionModalOpen(false);
+            setSelectedMember(null);
+            setEditingTransaction(null);
+          }}
+          onSave={handleSaveTransaction}
+          transaction={editingTransaction}
+          memberName={selectedMember?.name || ''}
+        />
 
-      <TransactionModal
-        isOpen={isTransactionModalOpen}
-        onClose={() => {
-          setIsTransactionModalOpen(false);
-          setSelectedMember(null);
-          setEditingTransaction(null);
-        }}
-        onSave={handleSaveTransaction}
-        transaction={editingTransaction}
-        memberName={selectedMember?.name || ''}
-      />
+        <MemberHistoryModal
+          isOpen={!!historyMember}
+          onClose={() => setHistoryMember(null)}
+          member={historyMember}
+          transactions={transactions}
+        />
 
-      <MemberHistoryModal
-        isOpen={!!historyMember}
-        onClose={() => setHistoryMember(null)}
-        member={historyMember}
-        transactions={transactions}
-      />
-
-      <DeleteConfirmModal
-        isOpen={isDeleteModalOpen}
-        onClose={() => {
-          setIsDeleteModalOpen(false);
-          setDeletingItem(null);
-        }}
-        onConfirm={handleDeleteConfirm}
-        title={deletingItem?.fixedAmount !== undefined ? "Delete Member" : "Delete Transaction"}
-        message={
-          deletingItem?.fixedAmount !== undefined
-            ? "Delete this member and all their transactions? This cannot be undone."
-            : "Delete this transaction? This cannot be undone."
-        }
-      />
-    </div>
+        <DeleteConfirmModal
+          isOpen={isDeleteModalOpen}
+          onClose={() => {
+            setIsDeleteModalOpen(false);
+            setDeletingItem(null);
+          }}
+          onConfirm={handleDeleteConfirm}
+          title={deletingItem?.fixedAmount !== undefined ? t('deleteMember') : t('deleteTransaction')}
+          message={
+            deletingItem?.fixedAmount !== undefined
+              ? t('deleteMemberMsg')
+              : t('deleteTransactionMsg')
+          }
+        />
+      </div>
+    </LanguageProvider>
   );
 }
