@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { useUndoRedo, generateId, formatMonthYear, formatDate, parseMonthYearString } from './hooks/useUndoRedo';
+import { useUndoRedo, generateId, formatMonthYear, formatDate } from './hooks/useUndoRedo';
 
 // ============= THEME CONTEXT =============
 
@@ -16,14 +16,17 @@ function setStoredTheme(theme) {
 // ============= UTILITY FUNCTIONS =============
 
 /**
- * Calculate months between two dates using the correct formula:
- * monthsActive = (currentYear - joinYear) * 12 + (currentMonth - joinMonth) + 1
- * The +1 ensures that even in the first month, they owe their first fixed amount.
+ * Calculate months between two dates (inclusive).
+ * If selected month is before join date, returns 0.
+ *
+ * Formula: (currentYear - joinYear) * 12 + (currentMonth - joinMonth) + 1
+ * +1 ensures first month counts as 1 month due.
  */
 function calculateMonthsElapsed(joinDate, selectedYear, selectedMonth) {
   const join = new Date(joinDate);
   const selected = new Date(selectedYear, selectedMonth, 1);
 
+  // If viewing month before they joined, no debt
   if (selected < join) return 0;
 
   const yearsDiff = selected.getFullYear() - join.getFullYear();
@@ -33,7 +36,8 @@ function calculateMonthsElapsed(joinDate, selectedYear, selectedMonth) {
 }
 
 /**
- * Calculate total due for a member up to a specific month
+ * Calculate total due for a member up to a specific month.
+ * Total Due = Total Months Due × Fixed Amount
  */
 function calculateTotalDue(member, selectedYear, selectedMonth) {
   const monthsElapsed = calculateMonthsElapsed(member.joinDate, selectedYear, selectedMonth);
@@ -41,35 +45,55 @@ function calculateTotalDue(member, selectedYear, selectedMonth) {
 }
 
 /**
- * Calculate total paid by a member (all transactions up to selected month)
+ * Calculate total paid by a member (only transactions ON or AFTER their join date).
+ * This prevents "double debt" where a new member might show negative balance due to
+ * transactions that were actually from before they joined.
  */
-function calculateTotalPaid(transactions, memberId, selectedYear, selectedMonth) {
-  const cutoffDate = new Date(selectedYear, selectedMonth + 1, 0);
+function calculateTotalPaid(transactions, memberId, joinDate, selectedYear, selectedMonth) {
+  const cutoffDate = new Date(selectedYear, selectedMonth + 1, 0); // Last day of selected month
+  const memberJoinDate = new Date(joinDate);
 
-  return transactions
-    .filter(t => {
-      if (t.memberId !== memberId) return false;
-      const txDate = new Date(t.date);
-      return txDate <= cutoffDate;
-    })
-    .reduce((sum, t) => sum + t.amount, 0);
+  // Start with 0
+  let total = 0;
+
+  transactions.forEach(t => {
+    if (t.memberId !== memberId) return;
+
+    const txDate = new Date(t.date);
+
+    // Only count if:
+    // 1. Transaction is on or after the member's join date
+    // 2. Transaction is on or before the cutoff date (selected month)
+    if (txDate >= memberJoinDate && txDate <= cutoffDate) {
+      total += t.amount;
+    }
+  });
+
+  return total;
 }
 
 /**
- * Calculate current balance for a member
+ * Calculate current balance for a member.
+ * Current Balance = Total Paid - Total Expected
  */
 function calculateBalance(transactions, member, selectedYear, selectedMonth) {
   const totalDue = calculateTotalDue(member, selectedYear, selectedMonth);
-  const totalPaid = calculateTotalPaid(transactions, member.id, selectedYear, selectedMonth);
+  const totalPaid = calculateTotalPaid(
+    transactions,
+    member.id,
+    member.joinDate,
+    selectedYear,
+    selectedMonth
+  );
   return totalPaid - totalDue;
 }
 
 /**
- * Get status label and info based on balance
- * FIXED LOGIC:
+ * Get status label and info based on balance.
+ *
  * - Due (Red): Balance < 0 (Total Paid < Total Due)
  * - Paid (Green): Balance == 0 (Total Paid == Total Due)
- * - Advanced (Blue): Balance > 0 (Total Paid > Total Due - strictly greater)
+ * - Advanced (Blue): Balance > 0 (Total Paid > Total Due)
  */
 function getStatusInfo(balance) {
   if (balance === 0) {
@@ -77,7 +101,6 @@ function getStatusInfo(balance) {
       status: 'paid',
       label: 'Paid',
       color: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',
-      borderColor: 'border-green-500',
       description: 'All payments up to date'
     };
   } else if (balance > 0) {
@@ -85,7 +108,6 @@ function getStatusInfo(balance) {
       status: 'advanced',
       label: 'Advanced',
       color: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',
-      borderColor: 'border-blue-500',
       description: `+${balance} TK surplus`
     };
   } else {
@@ -93,14 +115,13 @@ function getStatusInfo(balance) {
       status: 'due',
       label: 'Due',
       color: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300',
-      borderColor: 'border-red-500',
       description: `${Math.abs(balance)} TK deficit`
     };
   }
 }
 
 /**
- * Get first day of current month for default join date
+ * Get first day of current month for default join date.
  */
 function getFirstDayOfMonth() {
   const now = new Date();
@@ -108,7 +129,7 @@ function getFirstDayOfMonth() {
 }
 
 /**
- * Format currency
+ * Format currency.
  */
 function formatCurrency(amount) {
   return `${amount.toLocaleString()} TK`;
@@ -176,9 +197,20 @@ function MonthPicker({ selectedYear, selectedMonth, onYearChange, onMonthChange 
 }
 
 function MemberModal({ isOpen, onClose, onSave, member = null }) {
+  // Default to first day of current month
+  const defaultJoinDate = getFirstDayOfMonth();
   const [name, setName] = useState(member?.name || '');
   const [fixedAmount, setFixedAmount] = useState(member?.fixedAmount || 500);
-  const [joinDate, setJoinDate] = useState(member?.joinDate || getFirstDayOfMonth());
+  const [joinDate, setJoinDate] = useState(member?.joinDate || defaultJoinDate);
+
+  // Reset form when modal opens for new member
+  useEffect(() => {
+    if (isOpen && !member) {
+      setName('');
+      setFixedAmount(500);
+      setJoinDate(defaultJoinDate);
+    }
+  }, [isOpen, member, defaultJoinDate]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -189,11 +221,6 @@ function MemberModal({ isOpen, onClose, onSave, member = null }) {
       joinDate
     });
     onClose();
-    if (!member) {
-      setName('');
-      setFixedAmount(500);
-      setJoinDate(getFirstDayOfMonth());
-    }
   };
 
   if (!isOpen) return null;
@@ -209,7 +236,7 @@ function MemberModal({ isOpen, onClose, onSave, member = null }) {
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white dark:bg-gray-700 dark:text-white"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
               placeholder="Enter member name"
               required
             />
@@ -226,7 +253,7 @@ function MemberModal({ isOpen, onClose, onSave, member = null }) {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Join Date</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Start Month</label>
             <input
               type="date"
               value={joinDate}
@@ -234,7 +261,9 @@ function MemberModal({ isOpen, onClose, onSave, member = null }) {
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white dark:bg-gray-700 dark:text-white"
               required
             />
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">This determines how many months of contributions are due</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              Debt calculation starts from this month. No debt before joining.
+            </p>
           </div>
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={onClose} className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
@@ -250,22 +279,25 @@ function MemberModal({ isOpen, onClose, onSave, member = null }) {
   );
 }
 
-function TransactionModal({ isOpen, onClose, onSave, transaction = null, memberName = '' }) {
-  const [amount, setAmount] = useState(transaction?.amount || '');
-  const [date, setDate] = useState(transaction?.date || new Date().toISOString().split('T')[0]);
+function TransactionModal({ isOpen, onClose, onSave, transaction = null, memberName = '', defaultDate = null }) {
+  const [amount, setAmount] = useState(transaction?.amount?.toString() || '');
+  const [date, setDate] = useState(transaction?.date || defaultDate || new Date().toISOString().split('T')[0]);
   const [description, setDescription] = useState(transaction?.description || '');
 
+  // Reset form when modal opens
   useEffect(() => {
-    if (transaction) {
-      setAmount(transaction.amount);
-      setDate(transaction.date);
-      setDescription(transaction.description || '');
-    } else {
-      setAmount('');
-      setDate(new Date().toISOString().split('T')[0]);
-      setDescription('');
+    if (isOpen) {
+      if (transaction) {
+        setAmount(transaction.amount.toString());
+        setDate(transaction.date);
+        setDescription(transaction.description || '');
+      } else {
+        setAmount('');
+        setDate(defaultDate || new Date().toISOString().split('T')[0]);
+        setDescription('');
+      }
     }
-  }, [transaction, isOpen]);
+  }, [transaction, isOpen, defaultDate]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -494,14 +526,16 @@ function HistoryTab({ history }) {
   }, [history]);
 
   const getActionIcon = (action) => {
-    if (action === 'create') {
-      return <span className="w-2 h-2 bg-green-500 rounded-full"></span>;
-    } else if (action === 'edit') {
-      return <span className="w-2 h-2 bg-blue-500 rounded-full"></span>;
-    } else if (action === 'delete') {
-      return <span className="w-2 h-2 bg-red-500 rounded-full"></span>;
+    switch (action) {
+      case 'create':
+        return <span className="w-2 h-2 bg-green-500 rounded-full"></span>;
+      case 'edit':
+        return <span className="w-2 h-2 bg-blue-500 rounded-full"></span>;
+      case 'delete':
+        return <span className="w-2 h-2 bg-red-500 rounded-full"></span>;
+      default:
+        return <span className="w-2 h-2 bg-gray-500 rounded-full"></span>;
     }
-    return <span className="w-2 h-2 bg-gray-500 rounded-full"></span>;
   };
 
   if (history.length === 0) {
@@ -538,7 +572,7 @@ function HistoryTab({ history }) {
   );
 }
 
-function TransactionLog({ transactions, members, onViewLedger }) {
+function TransactionLog({ transactions, members }) {
   const recentTransactions = useMemo(() => {
     return [...transactions]
       .sort((a, b) => new Date(b.date) - new Date(a.date))
@@ -553,7 +587,7 @@ function TransactionLog({ transactions, members, onViewLedger }) {
   if (transactions.length === 0) {
     return (
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-        <h2 className="font-semibold text-gray-700 dark:text-gray-200 mb-4">Transaction Log</h2>
+        <h2 className="font-semibold text-gray-700 dark:text-gray-200 mb-4">Recent Activity</h2>
         <p className="text-gray-500 dark:text-gray-400 text-sm">No recent activity.</p>
       </div>
     );
@@ -561,14 +595,8 @@ function TransactionLog({ transactions, members, onViewLedger }) {
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow">
-      <div className="px-4 py-3 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600 flex items-center justify-between">
+      <div className="px-4 py-3 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
         <h2 className="font-semibold text-gray-700 dark:text-gray-200">Recent Activity</h2>
-        <button
-          onClick={onViewLedger}
-          className="text-sm text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 font-medium"
-        >
-          View Full Ledger →
-        </button>
       </div>
       <div className="divide-y divide-gray-100 dark:divide-gray-700 max-h-64 overflow-y-auto">
         {recentTransactions.map((t) => (
@@ -593,7 +621,7 @@ function TransactionLog({ transactions, members, onViewLedger }) {
 
 function MemberRow({ member, balance, statusInfo, monthsElapsed, totalDue, totalPaid, onAddTransaction, onEdit, onDelete, onViewLedger }) {
   return (
-    <div className="border-b border-gray-100 dark:border-gray-700">
+    <div className="border-b border-gray-100 dark:border-gray-700 last:border-b-0">
       <div className="flex items-center justify-between p-4 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
         <div className="flex-1">
           <div className="flex items-center gap-3">
@@ -606,7 +634,7 @@ function MemberRow({ member, balance, statusInfo, monthsElapsed, totalDue, total
           </div>
           <div className="flex items-center gap-4 mt-1 text-sm">
             <span className="text-gray-500 dark:text-gray-400">
-              Joined: {formatDate(member.joinDate)} ({monthsElapsed} months)
+              Joined: {formatDate(member.joinDate)} ({monthsElapsed} months due)
             </span>
             <span className="text-gray-500 dark:text-gray-400">
               Fixed: {formatCurrency(member.fixedAmount)}/mo
@@ -615,7 +643,7 @@ function MemberRow({ member, balance, statusInfo, monthsElapsed, totalDue, total
         </div>
 
         <div className="flex items-center gap-4">
-          <div className="text-right">
+          <div className="text-right min-w-[140px]">
             <div className={`text-lg font-semibold ${balance >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
               {formatCurrency(balance)}
             </div>
@@ -674,7 +702,13 @@ function GlobalDashboard({ members, transactions, selectedYear, selectedMonth })
     members.forEach((member) => {
       const balance = calculateBalance(transactions, member, selectedYear, selectedMonth);
       const totalDue = calculateTotalDue(member, selectedYear, selectedMonth);
-      const totalPaid = calculateTotalPaid(transactions, member.id, selectedYear, selectedMonth);
+      const totalPaid = calculateTotalPaid(
+        transactions,
+        member.id,
+        member.joinDate,
+        selectedYear,
+        selectedMonth
+      );
 
       totalGroupBalance += balance;
       totalCollected += totalPaid;
@@ -722,14 +756,7 @@ function exportToCSV(members, transactions, selectedYear, selectedMonth) {
     if (!member) return;
 
     if (!memberBalances[t.memberId]) {
-      const joinYear = new Date(member.joinDate).getFullYear();
-      const joinMonth = new Date(member.joinDate).getMonth();
-      const txDate = new Date(t.date);
-
-      let monthsElapsed = 0;
-      if (txDate >= new Date(member.joinDate)) {
-        monthsElapsed = (txDate.getFullYear() - joinYear) * 12 + (txDate.getMonth() - joinMonth) + 1;
-      }
+      const monthsElapsed = calculateMonthsElapsed(member.joinDate, new Date(t.date).getFullYear(), new Date(t.date).getMonth());
       const totalDue = member.fixedAmount * monthsElapsed;
       memberBalances[t.memberId] = -totalDue;
     }
@@ -819,7 +846,7 @@ export default function App() {
   const handleAddMember = (memberData) => {
     const newMember = { id: generateId(), ...memberData };
     setState((prev) => ({ ...prev, members: [...prev.members, newMember] }));
-    addToHistory('create', memberData.name, `Added as member (${memberData.fixedAmount} TK/month)`);
+    addToHistory('create', memberData.name, `Added as member (${memberData.fixedAmount} TK/month starting ${memberData.joinDate})`);
   };
 
   const handleUpdateMember = (memberData) => {
@@ -867,14 +894,16 @@ export default function App() {
     const memberName = selectedMember?.name || 'Unknown';
 
     if (editingTransaction) {
+      // Update existing transaction
       setState((prev) => ({
         ...prev,
         transactions: prev.transactions.map((t) =>
           t.id === editingTransaction.id ? { ...t, ...transactionData } : t
         ),
       }));
-      addToHistory('edit', memberName, `Updated transaction: ${transactionData.amount} TK`);
+      addToHistory('edit', memberName, `Updated transaction to ${transactionData.amount} TK`);
     } else {
+      // Add new transaction
       const newTransaction = {
         id: generateId(),
         memberId: selectedMember.id,
@@ -927,11 +956,18 @@ export default function App() {
     exportToCSV(members, transactions, selectedYear, selectedMonth);
   };
 
+  // Compute member data
   const memberData = useMemo(() => {
     return members.map((member) => {
       const monthsElapsed = calculateMonthsElapsed(member.joinDate, selectedYear, selectedMonth);
       const totalDue = calculateTotalDue(member, selectedYear, selectedMonth);
-      const totalPaid = calculateTotalPaid(transactions, member.id, selectedYear, selectedMonth);
+      const totalPaid = calculateTotalPaid(
+        transactions,
+        member.id,
+        member.joinDate,
+        selectedYear,
+        selectedMonth
+      );
       const balance = calculateBalance(transactions, member, selectedYear, selectedMonth);
       const statusInfo = getStatusInfo(balance);
 
@@ -983,6 +1019,7 @@ export default function App() {
       </header>
 
       <main className="max-w-6xl mx-auto px-4 py-6">
+        {/* Month Picker & Actions */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
           <MonthPicker
             selectedYear={selectedYear}
@@ -1046,13 +1083,14 @@ export default function App() {
             <TransactionLog
               transactions={transactions}
               members={members}
-              onViewLedger={() => setActiveTab('ledger')}
             />
 
             {/* Member List */}
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden mt-6">
               <div className="px-4 py-3 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
-                <h2 className="font-semibold text-gray-700 dark:text-gray-200">Members - {formatMonthYear(selectedYear, selectedMonth)}</h2>
+                <h2 className="font-semibold text-gray-700 dark:text-gray-200">
+                  Members - {formatMonthYear(selectedYear, selectedMonth)}
+                </h2>
               </div>
 
               {members.length === 0 ? (
