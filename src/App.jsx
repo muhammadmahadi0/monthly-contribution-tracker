@@ -697,12 +697,16 @@ function MemberCard({
   statusInfo,
   totalDue,
   totalPaid,
+  lifetimePaid = 0,
   onAddTransaction,
   onEdit,
   onDelete,
   onViewHistory
 }) {
   const { t } = useLanguage();
+
+  // Progress bar calculation
+  const progressPercent = totalDue > 0 ? Math.min((totalPaid / totalDue) * 100, 100) : 100;
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden mb-4">
@@ -728,11 +732,27 @@ function MemberCard({
 
       {/* Body */}
       <div className="px-4 py-4">
+        {/* Progress Bar */}
+        <div className="mb-4">
+          <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mb-1">
+            <span>{t('paidLabel')}: {formatCurrency(totalPaid)}</span>
+            <span>{t('expected')}: {formatCurrency(totalDue)}</span>
+          </div>
+          <div className="h-2 bg-gray-200 dark:bg-gray-600 rounded-full overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all duration-300 ${
+                progressPercent >= 100 ? 'bg-green-500' : progressPercent >= 50 ? 'bg-blue-500' : 'bg-red-500'
+              }`}
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+        </div>
+
         <div className="grid grid-cols-2 gap-4 mb-4">
           <div>
             <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">{t('currentBalance')}</div>
             <div className={`text-xl font-bold ${balance >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-              {formatCurrency(balance)}
+              {balance >= 0 ? '+' : ''}{formatCurrency(balance)}
             </div>
           </div>
           <div>
@@ -748,7 +768,7 @@ function MemberCard({
         <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3 mb-4">
           <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">{t('lifetimeSummary')}</div>
           <div className="text-sm font-medium text-gray-700 dark:text-gray-300">
-            {t('totalPaid')}: {formatCurrency(totalPaid)}
+            {t('lifetimePaid')}: <span className="text-indigo-600 dark:text-indigo-400">{formatCurrency(lifetimePaid)}</span>
           </div>
         </div>
       </div>
@@ -859,20 +879,25 @@ function MemberHistoryModal({ isOpen, onClose, member, transactions }) {
 
 function GlobalLedger({ members, transactions, onEditTransaction, onDeleteTransaction }) {
   const { t } = useLanguage();
+
+  // Safety check: ensure transactions is an array
+  const safeTransactions = Array.isArray(transactions) ? transactions : [];
+
   const sortedTransactions = useMemo(() => {
-    return [...transactions].sort((a, b) => new Date(b.date) - new Date(a.date));
-  }, [transactions]);
+    return [...safeTransactions].sort((a, b) => new Date(b.date) - new Date(a.date));
+  }, [safeTransactions]);
 
   const totalSum = useMemo(() => {
-    return transactions.reduce((sum, t) => sum + t.amount, 0);
-  }, [transactions]);
+    return safeTransactions.reduce((sum, t) => sum + (t.amount || 0), 0);
+  }, [safeTransactions]);
 
   const getMemberName = (memberId) => {
-    const member = members.find(m => m.id === memberId);
+    if (!memberId) return t('unknown');
+    const member = members?.find(m => m.id === memberId);
     return member?.name || t('unknown');
   };
 
-  if (transactions.length === 0) {
+  if (safeTransactions.length === 0) {
     return (
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-8 text-center">
         <svg className="w-12 h-12 text-gray-400 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1051,6 +1076,7 @@ export default function App() {
   const [isDark, setIsDark] = useState(() => getStoredTheme() === 'dark');
   const [language, setLanguage] = useState(() => getStoredLanguage());
   const [editHistory, setEditHistory] = useState([]);
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     if (isDark) {
@@ -1206,6 +1232,11 @@ export default function App() {
       const balance = calculateBalance(transactions, member, selectedYear, selectedMonth);
       const statusInfo = getStatusInfo(balance, t);
 
+      // Calculate lifetime total (all transactions for this member)
+      const lifetimePaid = (transactions || []).reduce((sum, t) => {
+        return t.memberId === member.id ? sum + (t.amount || 0) : sum;
+      }, 0);
+
       return {
         member,
         monthsElapsed,
@@ -1213,6 +1244,7 @@ export default function App() {
         totalPaid,
         balance,
         statusInfo,
+        lifetimePaid,
       };
     });
   }, [members, transactions, selectedYear, selectedMonth, language]);
@@ -1301,6 +1333,34 @@ export default function App() {
             ))}
           </div>
 
+          {/* Search Bar */}
+          {activeTab === 'dashboard' && members.length > 0 && (
+            <div className="mb-4">
+              <div className="relative">
+                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder={language === 'bn' ? 'সদস্য খুঁজুন...' : 'Search members...'}
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white dark:bg-gray-800 dark:text-white text-base"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
           {activeTab === 'dashboard' ? (
             <>
               <StatsDashboard
@@ -1327,20 +1387,36 @@ export default function App() {
                   </button>
                 </div>
               ) : (
-                memberData.map((data) => (
-                  <MemberCard
-                    key={data.member.id}
-                    member={data.member}
-                    balance={data.balance}
-                    statusInfo={data.statusInfo}
-                    totalDue={data.totalDue}
-                    totalPaid={data.totalPaid}
-                    onAddTransaction={() => handleAddTransaction(data.member)}
-                    onEdit={() => handleEditMember(data.member)}
-                    onDelete={() => confirmDeleteMember(data.member)}
-                    onViewHistory={() => handleViewHistory(data.member)}
-                  />
-                ))
+                <>
+                  {searchQuery && memberData.filter(m => m.member.name.toLowerCase().includes(searchQuery.toLowerCase())).length === 0 ? (
+                    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-8 text-center">
+                      <svg className="w-12 h-12 text-gray-400 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                      </svg>
+                      <p className="text-gray-500 dark:text-gray-400">
+                        {language === 'bn' ? 'কোনো সদস্য পাওয়া যায়নি' : 'No members found'}
+                      </p>
+                    </div>
+                  ) : (
+                    memberData
+                      .filter(m => !searchQuery || m.member.name.toLowerCase().includes(searchQuery.toLowerCase()))
+                      .map((data) => (
+                        <MemberCard
+                          key={data.member.id}
+                          member={data.member}
+                          balance={data.balance}
+                          statusInfo={data.statusInfo}
+                          totalDue={data.totalDue}
+                          totalPaid={data.totalPaid}
+                          lifetimePaid={data.lifetimePaid}
+                          onAddTransaction={() => handleAddTransaction(data.member)}
+                          onEdit={() => handleEditMember(data.member)}
+                          onDelete={() => confirmDeleteMember(data.member)}
+                          onViewHistory={() => handleViewHistory(data.member)}
+                        />
+                      ))
+                  )}
+                </>
               )}
 
               {members.length > 0 && (
