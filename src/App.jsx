@@ -1,10 +1,24 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useUndoRedo, generateId, formatMonthYear, formatDate, parseMonthYearString } from './hooks/useUndoRedo';
 
+// ============= THEME CONTEXT =============
+
+const THEME_KEY = 'ledger-theme';
+
+function getStoredTheme() {
+  return localStorage.getItem(THEME_KEY) || 'light';
+}
+
+function setStoredTheme(theme) {
+  localStorage.setItem(THEME_KEY, theme);
+}
+
 // ============= UTILITY FUNCTIONS =============
 
 /**
- * Calculate months between two dates (inclusive of start, up to end)
+ * Calculate months between two dates using the correct formula:
+ * monthsActive = (currentYear - joinYear) * 12 + (currentMonth - joinMonth) + 1
+ * The +1 ensures that even in the first month, they owe their first fixed amount.
  */
 function calculateMonthsElapsed(joinDate, selectedYear, selectedMonth) {
   const join = new Date(joinDate);
@@ -15,7 +29,7 @@ function calculateMonthsElapsed(joinDate, selectedYear, selectedMonth) {
   const yearsDiff = selected.getFullYear() - join.getFullYear();
   const monthsDiff = selected.getMonth() - join.getMonth();
 
-  return yearsDiff * 12 + monthsDiff + 1; // +1 to include the join month
+  return yearsDiff * 12 + monthsDiff + 1;
 }
 
 /**
@@ -30,7 +44,7 @@ function calculateTotalDue(member, selectedYear, selectedMonth) {
  * Calculate total paid by a member (all transactions up to selected month)
  */
 function calculateTotalPaid(transactions, memberId, selectedYear, selectedMonth) {
-  const cutoffDate = new Date(selectedYear, selectedMonth + 1, 0); // Last day of selected month
+  const cutoffDate = new Date(selectedYear, selectedMonth + 1, 0);
 
   return transactions
     .filter(t => {
@@ -52,37 +66,45 @@ function calculateBalance(transactions, member, selectedYear, selectedMonth) {
 
 /**
  * Get status label and info based on balance
+ * FIXED LOGIC:
+ * - Due (Red): Balance < 0 (Total Paid < Total Due)
+ * - Paid (Green): Balance == 0 (Total Paid == Total Due)
+ * - Advanced (Blue): Balance > 0 (Total Paid > Total Due - strictly greater)
  */
-function getStatusInfo(balance, totalDue, selectedMonth) {
-  if (balance >= 0) {
-    // Check if balance exceeds current month's due (advanced)
-    const currentMonthDue = totalDue - (calculateMonthsElapsed(
-      new Date().getFullYear(),
-      new Date().getFullYear(),
-      new Date().getMonth()
-    ) - 1) * (totalDue / (selectedMonth + 1));
-
-    if (balance > currentMonthDue * 0.5) { // If balance is more than half a month ahead
-      return {
-        status: 'advanced',
-        label: 'Paid (Advanced)',
-        amount: balance,
-        description: `+${balance} TK surplus`
-      };
-    }
+function getStatusInfo(balance) {
+  if (balance === 0) {
     return {
       status: 'paid',
       label: 'Paid',
-      amount: balance,
-      description: balance >= 0 ? 'All payments up to date' : `${balance} TK`
+      color: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',
+      borderColor: 'border-green-500',
+      description: 'All payments up to date'
+    };
+  } else if (balance > 0) {
+    return {
+      status: 'advanced',
+      label: 'Advanced',
+      color: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',
+      borderColor: 'border-blue-500',
+      description: `+${balance} TK surplus`
+    };
+  } else {
+    return {
+      status: 'due',
+      label: 'Due',
+      color: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300',
+      borderColor: 'border-red-500',
+      description: `${Math.abs(balance)} TK deficit`
     };
   }
-  return {
-    status: 'due',
-    label: 'Due',
-    amount: balance,
-    description: `${Math.abs(balance)} TK deficit`
-  };
+}
+
+/**
+ * Get first day of current month for default join date
+ */
+function getFirstDayOfMonth() {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
 }
 
 /**
@@ -93,6 +115,26 @@ function formatCurrency(amount) {
 }
 
 // ============= COMPONENTS =============
+
+function ThemeToggle({ isDark, toggleTheme }) {
+  return (
+    <button
+      onClick={toggleTheme}
+      className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
+      title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+    >
+      {isDark ? (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+        </svg>
+      ) : (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+        </svg>
+      )}
+    </button>
+  );
+}
 
 function MonthPicker({ selectedYear, selectedMonth, onYearChange, onMonthChange }) {
   const months = [
@@ -110,7 +152,7 @@ function MonthPicker({ selectedYear, selectedMonth, onYearChange, onMonthChange 
       <select
         value={selectedMonth}
         onChange={(e) => onMonthChange(parseInt(e.target.value))}
-        className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white"
+        className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white dark:bg-gray-800 dark:text-gray-200"
       >
         {months.map((month, index) => (
           <option key={month} value={index}>
@@ -121,7 +163,7 @@ function MonthPicker({ selectedYear, selectedMonth, onYearChange, onMonthChange 
       <select
         value={selectedYear}
         onChange={(e) => onYearChange(parseInt(e.target.value))}
-        className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white"
+        className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white dark:bg-gray-800 dark:text-gray-200"
       >
         {years.map((year) => (
           <option key={year} value={year}>
@@ -136,7 +178,7 @@ function MonthPicker({ selectedYear, selectedMonth, onYearChange, onMonthChange 
 function MemberModal({ isOpen, onClose, onSave, member = null }) {
   const [name, setName] = useState(member?.name || '');
   const [fixedAmount, setFixedAmount] = useState(member?.fixedAmount || 500);
-  const [joinDate, setJoinDate] = useState(member?.joinDate || new Date().toISOString().split('T')[0]);
+  const [joinDate, setJoinDate] = useState(member?.joinDate || getFirstDayOfMonth());
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -150,7 +192,7 @@ function MemberModal({ isOpen, onClose, onSave, member = null }) {
     if (!member) {
       setName('');
       setFixedAmount(500);
-      setJoinDate(new Date().toISOString().split('T')[0]);
+      setJoinDate(getFirstDayOfMonth());
     }
   };
 
@@ -158,44 +200,44 @@ function MemberModal({ isOpen, onClose, onSave, member = null }) {
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
-        <h2 className="text-xl font-semibold mb-4">{member ? 'Edit Member' : 'Add New Member'}</h2>
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-md p-6">
+        <h2 className="text-xl font-semibold mb-4 dark:text-white">{member ? 'Edit Member' : 'Add New Member'}</h2>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Name</label>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white dark:bg-gray-700 dark:text-white"
               placeholder="Enter member name"
               required
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Fixed Monthly Amount (TK)</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Fixed Monthly Amount (TK)</label>
             <input
               type="number"
               value={fixedAmount}
               onChange={(e) => setFixedAmount(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white dark:bg-gray-700 dark:text-white"
               min="1"
               required
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Join Date</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Join Date</label>
             <input
               type="date"
               value={joinDate}
               onChange={(e) => setJoinDate(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white dark:bg-gray-700 dark:text-white"
               required
             />
-            <p className="text-xs text-gray-500 mt-1">This determines how many months of contributions are due</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">This determines how many months of contributions are due</p>
           </div>
           <div className="flex gap-3 pt-2">
-            <button type="button" onClick={onClose} className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
+            <button type="button" onClick={onClose} className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
               Cancel
             </button>
             <button type="submit" className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium">
@@ -240,18 +282,18 @@ function TransactionModal({ isOpen, onClose, onSave, transaction = null, memberN
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
-        <h2 className="text-xl font-semibold mb-4">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-md p-6">
+        <h2 className="text-xl font-semibold mb-4 dark:text-white">
           {transaction ? `Edit Transaction - ${memberName}` : `Add Transaction - ${memberName}`}
         </h2>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Amount (TK)</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Amount (TK)</label>
             <input
               type="number"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white dark:bg-gray-700 dark:text-white"
               placeholder="Enter amount"
               min="1"
               step="0.01"
@@ -259,27 +301,27 @@ function TransactionModal({ isOpen, onClose, onSave, transaction = null, memberN
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Date</label>
             <input
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white dark:bg-gray-700 dark:text-white"
               required
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Description (Optional)</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description (Optional)</label>
             <input
               type="text"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white dark:bg-gray-700 dark:text-white"
               placeholder="e.g., Monthly contribution"
             />
           </div>
           <div className="flex gap-3 pt-2">
-            <button type="button" onClick={onClose} className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
+            <button type="button" onClick={onClose} className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
               Cancel
             </button>
             <button type="submit" className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium">
@@ -297,11 +339,11 @@ function DeleteConfirmModal({ isOpen, onClose, onConfirm, title, message }) {
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
-        <h2 className="text-lg font-semibold mb-2">{title}</h2>
-        <p className="text-gray-600 mb-4">{message}</p>
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-sm p-6">
+        <h2 className="text-lg font-semibold mb-2 dark:text-white">{title}</h2>
+        <p className="text-gray-600 dark:text-gray-300 mb-4">{message}</p>
         <div className="flex gap-3">
-          <button onClick={onClose} className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
+          <button onClick={onClose} className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
             Cancel
           </button>
           <button onClick={onConfirm} className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium">
@@ -320,12 +362,10 @@ function LedgerView({ members, transactions, selectedYear, selectedMonth, onEdit
   const filteredTransactions = useMemo(() => {
     let filtered = [...transactions];
 
-    // Filter by member
     if (selectedMemberId !== 'all') {
       filtered = filtered.filter(t => t.memberId === selectedMemberId);
     }
 
-    // Sort
     filtered.sort((a, b) => {
       switch (sortOrder) {
         case 'date-desc':
@@ -351,21 +391,21 @@ function LedgerView({ members, transactions, selectedYear, selectedMonth, onEdit
 
   if (members.length === 0) {
     return (
-      <div className="card p-8 text-center">
-        <p className="text-gray-500">No members to display. Add a member to see their ledger.</p>
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-8 text-center">
+        <p className="text-gray-500 dark:text-gray-400">No members to display. Add a member to see their ledger.</p>
       </div>
     );
   }
 
   return (
-    <div className="card overflow-hidden">
-      <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex flex-wrap gap-3 items-center justify-between">
-        <h2 className="font-semibold text-gray-700">Transaction Ledger</h2>
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+      <div className="px-4 py-3 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600 flex flex-wrap gap-3 items-center justify-between">
+        <h2 className="font-semibold text-gray-700 dark:text-gray-200">Transaction Ledger</h2>
         <div className="flex gap-2">
           <select
             value={selectedMemberId}
             onChange={(e) => setSelectedMemberId(e.target.value)}
-            className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white"
+            className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none bg-white dark:bg-gray-800 dark:text-gray-200"
           >
             <option value="all">All Members</option>
             {members.map(m => (
@@ -375,7 +415,7 @@ function LedgerView({ members, transactions, selectedYear, selectedMonth, onEdit
           <select
             value={sortOrder}
             onChange={(e) => setSortOrder(e.target.value)}
-            className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white"
+            className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none bg-white dark:bg-gray-800 dark:text-gray-200"
           >
             <option value="date-desc">Newest First</option>
             <option value="date-asc">Oldest First</option>
@@ -386,41 +426,41 @@ function LedgerView({ members, transactions, selectedYear, selectedMonth, onEdit
       </div>
 
       {filteredTransactions.length === 0 ? (
-        <div className="p-8 text-center text-gray-500">
+        <div className="p-8 text-center text-gray-500 dark:text-gray-400">
           No transactions found.
         </div>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-gray-50 border-b border-gray-200">
+            <thead className="bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Member</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Date</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Member</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Description</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Amount</th>
+                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
               {filteredTransactions.map((t) => (
-                <tr key={t.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-4 py-3 text-sm text-gray-600">
+                <tr key={t.id} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                  <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">
                     {formatDate(t.date)}
                   </td>
-                  <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                  <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">
                     {getMemberName(t.memberId)}
                   </td>
-                  <td className="px-4 py-3 text-sm text-gray-600">
+                  <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">
                     {t.description || '-'}
                   </td>
-                  <td className="px-4 py-3 text-sm text-right font-medium text-gray-900">
+                  <td className="px-4 py-3 text-sm text-right font-medium text-gray-900 dark:text-white">
                     {formatCurrency(t.amount)}
                   </td>
                   <td className="px-4 py-3 text-center">
                     <div className="flex items-center justify-center gap-1">
                       <button
                         onClick={() => onEditTransaction(t)}
-                        className="p-1.5 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
+                        className="p-1.5 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900 rounded transition-colors"
                         title="Edit transaction"
                       >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -429,7 +469,7 @@ function LedgerView({ members, transactions, selectedYear, selectedMonth, onEdit
                       </button>
                       <button
                         onClick={() => onDeleteTransaction(t)}
-                        className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                        className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900 rounded transition-colors"
                         title="Delete transaction"
                       >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -448,6 +488,56 @@ function LedgerView({ members, transactions, selectedYear, selectedMonth, onEdit
   );
 }
 
+function HistoryTab({ history }) {
+  const sortedHistory = useMemo(() => {
+    return [...history].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  }, [history]);
+
+  const getActionIcon = (action) => {
+    if (action === 'create') {
+      return <span className="w-2 h-2 bg-green-500 rounded-full"></span>;
+    } else if (action === 'edit') {
+      return <span className="w-2 h-2 bg-blue-500 rounded-full"></span>;
+    } else if (action === 'delete') {
+      return <span className="w-2 h-2 bg-red-500 rounded-full"></span>;
+    }
+    return <span className="w-2 h-2 bg-gray-500 rounded-full"></span>;
+  };
+
+  if (history.length === 0) {
+    return (
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <h2 className="font-semibold text-gray-700 dark:text-gray-200 mb-4">Edit History</h2>
+        <p className="text-gray-500 dark:text-gray-400 text-sm">No history yet. All transaction and member changes will be logged here.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+      <div className="px-4 py-3 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
+        <h2 className="font-semibold text-gray-700 dark:text-gray-200">Edit History</h2>
+      </div>
+      <div className="divide-y divide-gray-100 dark:divide-gray-700 max-h-96 overflow-y-auto">
+        {sortedHistory.map((item) => (
+          <div key={item.id} className="px-4 py-3 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+            <div className="flex items-center gap-3">
+              {getActionIcon(item.action)}
+              <div>
+                <span className="text-sm font-medium text-gray-900 dark:text-white">{item.targetName}</span>
+                <span className="text-sm text-gray-500 dark:text-gray-400 ml-2">{item.description}</span>
+              </div>
+            </div>
+            <div className="text-right">
+              <span className="text-xs text-gray-500 dark:text-gray-400">{formatDate(item.timestamp)}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function TransactionLog({ transactions, members, onViewLedger }) {
   const recentTransactions = useMemo(() => {
     return [...transactions]
@@ -462,37 +552,37 @@ function TransactionLog({ transactions, members, onViewLedger }) {
 
   if (transactions.length === 0) {
     return (
-      <div className="card p-6">
-        <h2 className="font-semibold text-gray-700 mb-4">Transaction Log</h2>
-        <p className="text-gray-500 text-sm">No recent activity.</p>
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <h2 className="font-semibold text-gray-700 dark:text-gray-200 mb-4">Transaction Log</h2>
+        <p className="text-gray-500 dark:text-gray-400 text-sm">No recent activity.</p>
       </div>
     );
   }
 
   return (
-    <div className="card">
-      <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
-        <h2 className="font-semibold text-gray-700">Recent Activity</h2>
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow">
+      <div className="px-4 py-3 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600 flex items-center justify-between">
+        <h2 className="font-semibold text-gray-700 dark:text-gray-200">Recent Activity</h2>
         <button
           onClick={onViewLedger}
-          className="text-sm text-indigo-600 hover:text-indigo-700 font-medium"
+          className="text-sm text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 font-medium"
         >
           View Full Ledger →
         </button>
       </div>
-      <div className="divide-y divide-gray-100 max-h-64 overflow-y-auto">
+      <div className="divide-y divide-gray-100 dark:divide-gray-700 max-h-64 overflow-y-auto">
         {recentTransactions.map((t) => (
-          <div key={t.id} className="px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors">
+          <div key={t.id} className="px-4 py-3 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
             <div className="flex items-center gap-3">
               <div className="w-2 h-2 bg-green-500 rounded-full"></div>
               <div>
-                <span className="text-sm font-medium text-gray-900">{getMemberName(t.memberId)}</span>
-                <span className="text-sm text-gray-500 ml-2">{t.description || 'Payment'}</span>
+                <span className="text-sm font-medium text-gray-900 dark:text-white">{getMemberName(t.memberId)}</span>
+                <span className="text-sm text-gray-500 dark:text-gray-400 ml-2">{t.description || 'Payment'}</span>
               </div>
             </div>
             <div className="text-right">
-              <span className="text-sm font-medium text-gray-900">{formatCurrency(t.amount)}</span>
-              <span className="text-xs text-gray-500 ml-2">{formatDate(t.date)}</span>
+              <span className="text-sm font-medium text-gray-900 dark:text-white">{formatCurrency(t.amount)}</span>
+              <span className="text-xs text-gray-500 dark:text-gray-400 ml-2">{formatDate(t.date)}</span>
             </div>
           </div>
         ))}
@@ -502,35 +592,23 @@ function TransactionLog({ transactions, members, onViewLedger }) {
 }
 
 function MemberRow({ member, balance, statusInfo, monthsElapsed, totalDue, totalPaid, onAddTransaction, onEdit, onDelete, onViewLedger }) {
-  const [showDetails, setShowDetails] = useState(false);
-
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'paid': return 'bg-green-100 text-green-700';
-      case 'advanced': return 'bg-purple-100 text-purple-700';
-      case 'due': return 'bg-red-100 text-red-700';
-      default: return 'bg-gray-100 text-gray-700';
-    }
-  };
-
   return (
-    <div className="border-b border-gray-100 last:border-b-0">
-      <div
-        className="flex items-center justify-between p-4 hover:bg-gray-50 transition-colors cursor-pointer"
-        onClick={() => setShowDetails(!showDetails)}
-      >
+    <div className="border-b border-gray-100 dark:border-gray-700">
+      <div className="flex items-center justify-between p-4 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
         <div className="flex-1">
           <div className="flex items-center gap-3">
-            <span className="font-medium text-gray-900">{member.name}</span>
-            <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${getStatusColor(statusInfo.status)}`}>
+            <span className="font-medium text-gray-900 dark:text-white">{member.name}</span>
+            <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${statusInfo.color}`}>
               {statusInfo.label}
+              {statusInfo.status === 'due' && `: ${Math.abs(balance)} TK`}
+              {statusInfo.status === 'advanced' && `: +${balance} TK`}
             </span>
           </div>
           <div className="flex items-center gap-4 mt-1 text-sm">
-            <span className="text-gray-500">
+            <span className="text-gray-500 dark:text-gray-400">
               Joined: {formatDate(member.joinDate)} ({monthsElapsed} months)
             </span>
-            <span className="text-gray-500">
+            <span className="text-gray-500 dark:text-gray-400">
               Fixed: {formatCurrency(member.fixedAmount)}/mo
             </span>
           </div>
@@ -538,18 +616,18 @@ function MemberRow({ member, balance, statusInfo, monthsElapsed, totalDue, total
 
         <div className="flex items-center gap-4">
           <div className="text-right">
-            <div className={`text-lg font-semibold ${balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+            <div className={`text-lg font-semibold ${balance >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
               {formatCurrency(balance)}
             </div>
-            <div className="text-xs text-gray-500">
+            <div className="text-xs text-gray-500 dark:text-gray-400">
               Paid: {formatCurrency(totalPaid)} / Due: {formatCurrency(totalDue)}
             </div>
           </div>
 
-          <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center gap-1">
             <button
               onClick={() => onViewLedger(member)}
-              className="p-2 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+              className="p-2 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900 rounded-lg transition-colors"
               title="View ledger"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -558,13 +636,13 @@ function MemberRow({ member, balance, statusInfo, monthsElapsed, totalDue, total
             </button>
             <button
               onClick={() => onAddTransaction()}
-              className="px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition-colors text-sm font-medium"
+              className="px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900 text-indigo-600 dark:text-indigo-300 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-800 transition-colors text-sm font-medium"
             >
               + Add
             </button>
             <button
               onClick={() => onEdit()}
-              className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+              className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-lg transition-colors"
               title="Edit member"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -573,7 +651,7 @@ function MemberRow({ member, balance, statusInfo, monthsElapsed, totalDue, total
             </button>
             <button
               onClick={() => onDelete()}
-              className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+              className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900 rounded-lg transition-colors"
               title="Delete member"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -608,24 +686,24 @@ function GlobalDashboard({ members, transactions, selectedYear, selectedMonth })
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-      <div className="card p-4">
-        <div className="text-sm text-gray-500">Total Group Balance</div>
-        <div className={`text-2xl font-bold ${totals.totalGroupBalance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+        <div className="text-sm text-gray-500 dark:text-gray-400">Total Group Balance</div>
+        <div className={`text-2xl font-bold ${totals.totalGroupBalance >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
           {formatCurrency(totals.totalGroupBalance)}
         </div>
-        <div className="text-xs text-gray-500 mt-1">
+        <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
           {totals.totalGroupBalance >= 0 ? 'Surplus' : 'Deficit'}
         </div>
       </div>
-      <div className="card p-4">
-        <div className="text-sm text-gray-500">Total Collected</div>
-        <div className="text-2xl font-bold text-gray-900">{formatCurrency(totals.totalCollected)}</div>
-        <div className="text-xs text-gray-500 mt-1">All payments to date</div>
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+        <div className="text-sm text-gray-500 dark:text-gray-400">Total Collected</div>
+        <div className="text-2xl font-bold text-gray-900 dark:text-white">{formatCurrency(totals.totalCollected)}</div>
+        <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">All payments to date</div>
       </div>
-      <div className="card p-4">
-        <div className="text-sm text-gray-500">Total Expected</div>
-        <div className="text-2xl font-bold text-gray-700">{formatCurrency(totals.totalExpected)}</div>
-        <div className="text-xs text-gray-500 mt-1">Through {formatMonthYear(selectedYear, selectedMonth)}</div>
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+        <div className="text-sm text-gray-500 dark:text-gray-400">Total Expected</div>
+        <div className="text-2xl font-bold text-gray-700 dark:text-gray-300">{formatCurrency(totals.totalExpected)}</div>
+        <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">Through {formatMonthYear(selectedYear, selectedMonth)}</div>
       </div>
     </div>
   );
@@ -636,10 +714,7 @@ function exportToCSV(members, transactions, selectedYear, selectedMonth) {
     ['Date', 'Member', 'Description', 'Amount', 'Balance After'],
   ];
 
-  // Sort transactions by date
   const sortedTransactions = [...transactions].sort((a, b) => new Date(a.date) - new Date(b.date));
-
-  // Track running balance per member
   const memberBalances = {};
 
   sortedTransactions.forEach((t) => {
@@ -647,7 +722,6 @@ function exportToCSV(members, transactions, selectedYear, selectedMonth) {
     if (!member) return;
 
     if (!memberBalances[t.memberId]) {
-      // Initialize balance from join date to transaction date
       const joinYear = new Date(member.joinDate).getFullYear();
       const joinMonth = new Date(member.joinDate).getMonth();
       const txDate = new Date(t.date);
@@ -696,7 +770,7 @@ export default function App() {
 
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
-  const [activeTab, setActiveTab] = useState('dashboard'); // dashboard, ledger
+  const [activeTab, setActiveTab] = useState('dashboard');
 
   const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
   const [isTransactionModalOpen, setIsTransactionModalOpen] = useState(false);
@@ -707,7 +781,35 @@ export default function App() {
   const [editingTransaction, setEditingTransaction] = useState(null);
   const [deletingItem, setDeletingItem] = useState(null);
 
-  // Tab navigation - ledger view
+  // Dark mode state
+  const [isDark, setIsDark] = useState(() => getStoredTheme() === 'dark');
+
+  // History for tracking edits
+  const [editHistory, setEditHistory] = useState([]);
+
+  // Apply dark mode class to document
+  useEffect(() => {
+    if (isDark) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+    setStoredTheme(isDark ? 'dark' : 'light');
+  }, [isDark]);
+
+  const toggleTheme = () => setIsDark(!isDark);
+
+  // Add to history
+  const addToHistory = (action, targetName, description) => {
+    setEditHistory(prev => [...prev, {
+      id: generateId(),
+      action,
+      targetName,
+      description,
+      timestamp: new Date().toISOString()
+    }]);
+  };
+
   const handleViewLedger = (member) => {
     setSelectedMember(member);
     setActiveTab('ledger');
@@ -717,6 +819,7 @@ export default function App() {
   const handleAddMember = (memberData) => {
     const newMember = { id: generateId(), ...memberData };
     setState((prev) => ({ ...prev, members: [...prev.members, newMember] }));
+    addToHistory('create', memberData.name, `Added as member (${memberData.fixedAmount} TK/month)`);
   };
 
   const handleUpdateMember = (memberData) => {
@@ -726,16 +829,19 @@ export default function App() {
         m.id === editingMember.id ? { ...m, ...memberData } : m
       ),
     }));
+    addToHistory('edit', memberData.name, 'Updated member details');
     setEditingMember(null);
   };
 
   const handleDeleteMember = () => {
     if (!deletingItem) return;
+    const memberName = deletingItem.name;
     setState((prev) => ({
       ...prev,
       members: prev.members.filter((m) => m.id !== deletingItem.id),
       transactions: prev.transactions.filter((t) => t.memberId !== deletingItem.id),
     }));
+    addToHistory('delete', memberName, 'Deleted member and all transactions');
     setDeletingItem(null);
     setIsDeleteModalOpen(false);
   };
@@ -758,16 +864,17 @@ export default function App() {
   };
 
   const handleSaveTransaction = (transactionData) => {
+    const memberName = selectedMember?.name || 'Unknown';
+
     if (editingTransaction) {
-      // Edit existing transaction
       setState((prev) => ({
         ...prev,
         transactions: prev.transactions.map((t) =>
           t.id === editingTransaction.id ? { ...t, ...transactionData } : t
         ),
       }));
+      addToHistory('edit', memberName, `Updated transaction: ${transactionData.amount} TK`);
     } else {
-      // Add new transaction
       const newTransaction = {
         id: generateId(),
         memberId: selectedMember.id,
@@ -777,6 +884,7 @@ export default function App() {
         ...prev,
         transactions: [...prev.transactions, newTransaction],
       }));
+      addToHistory('create', memberName, `Added transaction: ${transactionData.amount} TK`);
     }
     setSelectedMember(null);
     setEditingTransaction(null);
@@ -797,15 +905,16 @@ export default function App() {
 
   const confirmDeleteTransaction = () => {
     if (!deletingItem || !deletingItem.memberId) return;
+    const member = members.find(m => m.id === deletingItem.memberId);
     setState((prev) => ({
       ...prev,
       transactions: prev.transactions.filter((t) => t.id !== deletingItem.id),
     }));
+    addToHistory('delete', member?.name || 'Unknown', `Deleted transaction: ${deletingItem.amount} TK`);
     setDeletingItem(null);
     setIsDeleteModalOpen(false);
   };
 
-  // Check if deleting member or transaction
   const handleDeleteConfirm = () => {
     if (deletingItem?.fixedAmount !== undefined) {
       handleDeleteMember();
@@ -814,19 +923,17 @@ export default function App() {
     }
   };
 
-  // Export
   const handleExportCSV = () => {
     exportToCSV(members, transactions, selectedYear, selectedMonth);
   };
 
-  // Computed values for members
   const memberData = useMemo(() => {
     return members.map((member) => {
       const monthsElapsed = calculateMonthsElapsed(member.joinDate, selectedYear, selectedMonth);
       const totalDue = calculateTotalDue(member, selectedYear, selectedMonth);
       const totalPaid = calculateTotalPaid(transactions, member.id, selectedYear, selectedMonth);
       const balance = calculateBalance(transactions, member, selectedYear, selectedMonth);
-      const statusInfo = getStatusInfo(balance, totalDue, selectedMonth);
+      const statusInfo = getStatusInfo(balance);
 
       return {
         member,
@@ -840,19 +947,20 @@ export default function App() {
   }, [members, transactions, selectedYear, selectedMonth]);
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-40">
+    <div className="min-h-screen bg-gray-50 dark:bg-slate-900 transition-colors">
+      <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-40">
         <div className="max-w-6xl mx-auto px-4 py-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Cumulative Ledger System</h1>
-              <p className="text-sm text-gray-500">Track member contributions with running balances</p>
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Cumulative Ledger System</h1>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Track member contributions with running balances</p>
             </div>
             <div className="flex items-center gap-2">
+              <ThemeToggle isDark={isDark} toggleTheme={toggleTheme} />
               <button
                 onClick={undo}
                 disabled={!canUndo}
-                className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 title="Undo (Ctrl+Z)"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -862,7 +970,7 @@ export default function App() {
               <button
                 onClick={redo}
                 disabled={!canRedo}
-                className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 title="Redo (Ctrl+Y)"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -875,7 +983,6 @@ export default function App() {
       </header>
 
       <main className="max-w-6xl mx-auto px-4 py-6">
-        {/* Month Picker & Actions */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
           <MonthPicker
             selectedYear={selectedYear}
@@ -884,7 +991,7 @@ export default function App() {
             onMonthChange={setSelectedMonth}
           />
           <div className="flex gap-2">
-            <button onClick={handleExportCSV} className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium">
+            <button onClick={handleExportCSV} className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium">
               Export CSV
             </button>
             <button onClick={() => setIsMemberModalOpen(true)} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm font-medium">
@@ -894,13 +1001,13 @@ export default function App() {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 mb-6 border-b border-gray-200">
+        <div className="flex gap-1 mb-6 border-b border-gray-200 dark:border-gray-700">
           <button
             onClick={() => setActiveTab('dashboard')}
             className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
               activeTab === 'dashboard'
-                ? 'border-indigo-600 text-indigo-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
+                ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
             }`}
           >
             Dashboard
@@ -909,11 +1016,21 @@ export default function App() {
             onClick={() => setActiveTab('ledger')}
             className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
               activeTab === 'ledger'
-                ? 'border-indigo-600 text-indigo-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
+                ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
             }`}
           >
             Full Ledger
+          </button>
+          <button
+            onClick={() => setActiveTab('history')}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === 'history'
+                ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+            }`}
+          >
+            History
           </button>
         </div>
 
@@ -933,20 +1050,20 @@ export default function App() {
             />
 
             {/* Member List */}
-            <div className="card overflow-hidden mt-6">
-              <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
-                <h2 className="font-semibold text-gray-700">Members - {formatMonthYear(selectedYear, selectedMonth)}</h2>
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden mt-6">
+              <div className="px-4 py-3 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
+                <h2 className="font-semibold text-gray-700 dark:text-gray-200">Members - {formatMonthYear(selectedYear, selectedMonth)}</h2>
               </div>
 
               {members.length === 0 ? (
                 <div className="p-8 text-center">
-                  <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <div className="w-16 h-16 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-4">
                     <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
                     </svg>
                   </div>
-                  <h3 className="text-lg font-medium text-gray-900 mb-1">No members yet</h3>
-                  <p className="text-gray-500 mb-4">Add your first member to start tracking contributions</p>
+                  <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-1">No members yet</h3>
+                  <p className="text-gray-500 dark:text-gray-400 mb-4">Add your first member to start tracking contributions</p>
                   <button onClick={() => setIsMemberModalOpen(true)} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium">
                     + Add Member
                   </button>
@@ -970,7 +1087,7 @@ export default function App() {
               )}
             </div>
           </>
-        ) : (
+        ) : activeTab === 'ledger' ? (
           <LedgerView
             members={members}
             transactions={transactions}
@@ -979,6 +1096,8 @@ export default function App() {
             onEditTransaction={handleEditTransaction}
             onDeleteTransaction={handleDeleteTransaction}
           />
+        ) : (
+          <HistoryTab history={editHistory} />
         )}
       </main>
 
