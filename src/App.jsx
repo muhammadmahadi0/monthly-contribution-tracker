@@ -899,64 +899,73 @@ function GlobalLedger({ members, transactions, onEditTransaction, onDeleteTransa
 
   if (safeTransactions.length === 0) {
     return (
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-8 text-center">
-        <svg className="w-12 h-12 text-gray-400 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-        </svg>
-        <p className="text-gray-500 dark:text-gray-400">{t('noTransactions')}</p>
+      <div className="space-y-4">
+        {/* Grand Total Card - Empty State */}
+        <div className="bg-gradient-to-r from-indigo-600 to-blue-500 rounded-xl shadow-lg p-5 text-white">
+          <div className="text-sm opacity-80 mb-1">{t('total')}</div>
+          <div className="text-3xl font-bold">0 TK</div>
+          <div className="text-sm opacity-80 mt-1">{t('noTransactions')}</div>
+        </div>
+
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-8 text-center">
+          <svg className="w-12 h-12 text-gray-400 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+          </svg>
+          <p className="text-gray-500 dark:text-gray-400">{t('noTransactions')}</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden">
-      <div className="px-4 py-3 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
-        <h2 className="font-semibold text-gray-700 dark:text-gray-200">{t('allTransactions')}</h2>
-        <p className="text-xs text-gray-500 dark:text-gray-400">{t('showingPayments')}</p>
+    <div className="space-y-4">
+      {/* Grand Total Card */}
+      <div className="bg-gradient-to-r from-indigo-600 to-blue-500 rounded-xl shadow-lg p-5 text-white">
+        <div className="text-sm opacity-80 mb-1">{t('total')}</div>
+        <div className="text-3xl font-bold">{formatCurrency(totalSum)}</div>
+        <div className="text-sm opacity-80 mt-1">{t('showingPayments')}</div>
       </div>
 
-      <div className="divide-y divide-gray-100 dark:divide-gray-700">
+      {/* Transaction Cards */}
+      <div className="space-y-3">
         {sortedTransactions.map((t) => (
-          <div key={t.id} className="px-4 py-3 flex items-center justify-between">
-            <div className="flex-1">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="font-medium text-gray-900 dark:text-white">{getMemberName(t.memberId)}</span>
-                <span className="text-xs text-gray-500 dark:text-gray-400">{formatDate(t.date)}</span>
+          <div key={t.id} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-4">
+            <div className="flex items-start justify-between">
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xs text-gray-500 dark:text-gray-400">{formatDate(t.date)}</span>
+                </div>
+                <div className="font-semibold text-gray-900 dark:text-white">{getMemberName(t.memberId)}</div>
+                {t.description && (
+                  <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t.description}</div>
+                )}
               </div>
-              {t.description && (
-                <div className="text-sm text-gray-500 dark:text-gray-400">{t.description}</div>
-              )}
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="font-semibold text-green-600 dark:text-green-400">{formatCurrency(t.amount)}</span>
-              <div className="flex gap-1">
-                <button
-                  onClick={() => onEditTransaction(t)}
-                  className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900 rounded-lg transition-colors"
-                  title={t('edit')}
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                  </svg>
-                </button>
-                <button
-                  onClick={() => onDeleteTransaction(t)}
-                  className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900 rounded-lg transition-colors"
-                  title={t('delete')}
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
-                </button>
+              <div className="flex flex-col items-end gap-2">
+                <span className="text-lg font-bold text-green-600 dark:text-green-400">{formatCurrency(t.amount)}</span>
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => onEditTransaction(t)}
+                    className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900 rounded-lg transition-colors"
+                    title={t('edit')}
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => onDeleteTransaction(t)}
+                    className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900 rounded-lg transition-colors"
+                    title={t('delete')}
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
         ))}
-      </div>
-
-      <div className="px-4 py-3 bg-gray-50 dark:bg-gray-700 border-t border-gray-200 dark:border-gray-600 flex justify-between items-center">
-        <span className="font-medium text-gray-700 dark:text-gray-300">{t('total')}</span>
-        <span className="text-xl font-bold text-gray-900 dark:text-white">{formatCurrency(totalSum)}</span>
       </div>
     </div>
   );
