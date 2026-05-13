@@ -36,10 +36,11 @@ jobs:
         run: npm install @capacitor/core @capacitor/cli @capacitor/android
 
       - name: Add Android platform
-        run: npx cap add android
-
-      - name: Sync Capacitor config
-        run: npx cap sync
+        run: |
+          if [ ! -d "android" ]; then
+            npx cap add android
+          fi
+          npx cap sync
 
       - name: Ensure gradlew is executable
         run: chmod +x ./android/gradlew
