@@ -1,0 +1,12 @@
+{
+  "appId": "com.hisabrakkhok.app",
+  "appName": "হিসাব রক্ষক",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "android": {
+    "allowMixedContent": true
+  },
+  "server": {
+    "androidScheme": "https"
+  }
+}

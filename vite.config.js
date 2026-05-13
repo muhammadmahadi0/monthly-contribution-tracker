@@ -9,8 +9,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
       manifest: {
-        name: 'Monthly Contribution Tracker',
-        short_name: 'TK Tracker',
+        name: 'হিসাব রক্ষক',
+        short_name: 'হিসাব',
         description: 'Track your monthly contributions and payments',
         theme_color: '#0f172a',
         background_color: '#0f172a',
