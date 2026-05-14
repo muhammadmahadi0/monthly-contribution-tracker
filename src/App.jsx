@@ -1081,7 +1081,7 @@ async function exportToCSV(members, transactions, selectedYear, selectedMonth) {
     rows.push([t.date, member.name, t.description || '', t.amount, memberBalances[t.memberId]]);
   });
 
-  const csvContent = rows.map((row) => row.map(cell => `"${cell}"`).join(',')).join('\n');
+  const csvContent = rows.map((row) => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
 
   if (Capacitor.isNativePlatform()) {
     try {
@@ -1098,15 +1098,16 @@ async function exportToCSV(members, transactions, selectedYear, selectedMonth) {
       alert('Failed to save file. Please check storage permissions.');
     }
   } else {
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8' });
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     link.setAttribute('href', url);
-    link.setAttribute('download', `ledger-${selectedYear}-${selectedMonth + 1}.csv`);
+    link.setAttribute('download', `ledger-${selectedYear}-${(selectedMonth + 1).toString().padStart(2, '0')}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   }
 }
 
