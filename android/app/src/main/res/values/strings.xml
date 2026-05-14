@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">হিসাব রক্ষক</string>
+    <string name="title_activity_main">হিসাব রক্ষক</string>
+    <string name="package_name">com.hisab.rakkhok</string>
+    <string name="custom_url_scheme">com.hisab.rakkhok</string>
+</resources>
