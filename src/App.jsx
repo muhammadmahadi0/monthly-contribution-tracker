@@ -1,5 +1,7 @@
 import { useState, useMemo, useEffect, createContext, useContext } from 'react';
 import { useUndoRedo, generateId, formatMonthYear, formatDate } from './hooks/useUndoRedo';
+import { Capacitor } from '@capacitor/core';
+import { Filesystem, Directory } from '@capacitor/filesystem';
 
 // ============= THEME & LANGUAGE CONTEXT =============
 
@@ -1058,7 +1060,7 @@ function HistoryTab({ history }) {
   );
 }
 
-function exportToCSV(members, transactions, selectedYear, selectedMonth) {
+async function exportToCSV(members, transactions, selectedYear, selectedMonth) {
   const rows = [['Date', 'Member', 'Description', 'Amount', 'Balance After']];
 
   const sortedTransactions = [...transactions].sort((a, b) => new Date(a.date) - new Date(b.date));
@@ -1080,15 +1082,32 @@ function exportToCSV(members, transactions, selectedYear, selectedMonth) {
   });
 
   const csvContent = rows.map((row) => row.map(cell => `"${cell}"`).join(',')).join('\n');
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-  const link = document.createElement('a');
-  const url = URL.createObjectURL(blob);
-  link.setAttribute('href', url);
-  link.setAttribute('download', `ledger-${selectedYear}-${selectedMonth + 1}.csv`);
-  link.style.visibility = 'hidden';
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const base64 = btoa(unescape(encodeURIComponent(csvContent)));
+      await Filesystem.writeFile({
+        path: 'hisab_ledger.csv',
+        data: base64,
+        directory: Directory.Documents,
+        encoding: 'base64'
+      });
+      alert('File saved to Documents/hisab_ledger.csv');
+    } catch (error) {
+      console.error('Failed to save file:', error);
+      alert('Failed to save file. Please check storage permissions.');
+    }
+  } else {
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `ledger-${selectedYear}-${selectedMonth + 1}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
 }
 
 // ============= MAIN APP =============
